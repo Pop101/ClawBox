@@ -14,13 +14,21 @@ A fully self-contained OpenClaw deployment that acts as a personal AI assistant 
 - **Process management** — supervisord manages gateway, stealth browser, and relay with auto-restart.
 - **Cost controls** — prompt caching, context pruning, quiet hours, heartbeat on cheapest model.
 
-## Cheapest setup (~$10/month)
+## Cost breakdown
 
-**Model:** [Z.ai](https://z.ai) `glm-5-turbo` — free $10/month credits on signup. Fast, 200K context, good at tool use. Set as primary in `models.json`.
+| Service | Cost | Notes |
+|---------|------|-------|
+| **Z.ai** (glm-5-turbo) | **Free** $10/mo credits | Primary model. Fast, 200K context. [Sign up](https://z.ai) |
+| **Oracle Cloud** | **Free forever** | 4 ARM OCPUs, 24GB RAM, 200GB disk. [Always Free tier](https://www.oracle.com/cloud/free/) |
+| **Vapi** (voice calls) | ~$10 / 3 months | Pay-per-call. $10 lasts months of light use. [vapi.ai](https://vapi.ai) |
+| **Capsolver** (captchas) | ~$10 / forever | Pay-per-solve. $10 lasts effectively forever. [capsolver.com](https://capsolver.com) |
+| **Tavily** (web search) | Free tier | 1,000 searches/month free. [tavily.com](https://tavily.com) |
+| **SMS Gateway** | Free tier | Cloud API included. [sms-gate.app](https://sms-gate.app) |
+| Telegram, GitHub, Google Workspace, Signal | Free | — |
 
-**Hosting:** [Oracle Cloud Always Free](https://www.oracle.com/cloud/free/) — 4 ARM OCPUs, 24GB RAM, 200GB storage, free forever.
+**Total: ~$10/month** (just the model credits). Everything else is free or effectively free.
 
-Add a fallback (Llama.cpp, OpenRouter, etc.) for when Z.ai credits run out. I recommend [Qwen 35 Claude 4.6 Opus Reasoning](https://huggingface.co/mradermacher/Qwen3.5-27B-Claude-4.6-Opus-Reasoning-Distilled-i1-GGUF) - 27B parameters, vision support, works on consumer hardware.
+Add a fallback model for when Z.ai credits run out. Recommended: [Qwen 35 Claude 4.6 Opus Reasoning](https://huggingface.co/mradermacher/Qwen3.5-27B-Claude-4.6-Opus-Reasoning-Distilled-i1-GGUF) — 27B parameters, vision support, runs on consumer hardware via llama.cpp.
 
 ## Quick start
 
