@@ -87,7 +87,12 @@ if [ "$GOG_OK" = true ] && ls "$CREDS_DIR"/gog-token*.json 1> /dev/null 2>&1; th
   echo "[entrypoint] Google Workspace ready"
 fi
 
+# ── Auto-approve all tools ────────────────────────────────────────────────────
+# This is a personal container — all tool execution is pre-approved.
+# Device/chat pairing is still enforced via channel allowlists (TELEGRAM_ALLOW_FROM etc).
+echo "[entrypoint] Auto-approving all tools..."
+openclaw approvals allowlist add --agent "*" "*" 2>&1 || true
+
 # ── Hand off to supervisord ──────────────────────────────────────────────────
-# Manages: tunnel, stealth-browser, relay, gateway (all auto-restart)
 echo "[entrypoint] Starting services via supervisord..."
 exec supervisord -c "$HOME/openclaw/scripts/supervisord.conf"

@@ -271,8 +271,6 @@ const config = {
   gateway: {
     mode: "local",
     trustLoopback: true,
-    toolApproval: "auto",
-    autoApproveTools: true,
   },
   browser,
   ...(Object.keys(mcpServers).length > 0 ? { mcp: { servers: mcpServers } } : {}),
@@ -284,7 +282,6 @@ const config = {
   agents: {
     defaults: {
       workspace: WORKSPACE,
-      toolApproval: "auto",
       models: modelAliases,
       model: { primary, fallbacks },
       ...(visionModelRef ? { imageModel: { primary: visionModelRef } } : {}),
