@@ -31,7 +31,16 @@ function smsApi(method, path, body) {
   if (!SMS_URL || !SMS_USER || !SMS_PASS) return "";
   const bodyArg = body ? `-d '${JSON.stringify(body)}'` : "";
   const ct = body ? '-H "Content-Type: application/json"' : "";
-  return run(`curl -sf -X ${method} -u "${SMS_USER}:${SMS_PASS}" ${ct} ${bodyArg} "${SMS_URL}${path}" 2>/dev/null`);
+  const nl = String.raw`\n`;
+  const cmd = `curl -s -w "${nl}HTTP_%{http_code}" -X ${method} -u "${SMS_USER}:${SMS_PASS}" ${ct} ${bodyArg} "${SMS_URL}${path}"`;
+  const raw = run(cmd);
+  const lines = raw.split("\n");
+  const statusLine = lines.pop();
+  const responseBody = lines.join("\n");
+  if (statusLine && !statusLine.includes("HTTP_2")) {
+    console.error(`[relay] SMS API ${method} ${path} → ${statusLine}: ${responseBody.slice(0, 200)}`);
+  }
+  return responseBody;
 }
 
 function sendToAgent(text) {
@@ -47,11 +56,13 @@ function sendToAgent(text) {
 // ── SMS webhook receiver ─────────────────────────────────────────────────────
 
 const server = http.createServer(async (req, res) => {
-  // Accept any POST (SMS Gateway sends to the root or /sms)
+  console.log(`[relay] HTTP ${req.method} ${req.url}`);
+
   if (req.method !== "POST") { res.writeHead(404); res.end(); return; }
 
   let body = "";
   for await (const chunk of req) body += chunk;
+  console.log(`[relay] Webhook body (${body.length} bytes): ${body.slice(0, 200)}`);
 
   try {
     const data = JSON.parse(body);
@@ -102,9 +113,9 @@ function ensureSmsWebhook() {
   const webhookUrl = base + "/sms";
   if (webhookUrl === lastRegisteredUrl) return;
 
-  smsApi("POST", "/api/3rdparty/v1/webhooks", { url: webhookUrl, event: "sms:received" });
+  const regResult = smsApi("POST", "/3rdparty/v1/webhooks", { url: webhookUrl, event: "sms:received" });
   lastRegisteredUrl = webhookUrl;
-  console.log(`[relay] Registered SMS webhook: ${webhookUrl}`);
+  console.log(`[relay] Registered SMS webhook: ${webhookUrl} → ${regResult || "(empty response)"}`);
 }
 
 function triggerSmsExport() {
@@ -114,19 +125,20 @@ function triggerSmsExport() {
     return;
   }
 
-  const devicesRaw = smsApi("GET", "/api/3rdparty/v1/device");
+  const devicesRaw = smsApi("GET", "/3rdparty/v1/device");
+  console.log(`[relay] Devices response: ${devicesRaw || "(empty)"}`);
   if (!devicesRaw) return;
 
   let devices;
   try { devices = JSON.parse(devicesRaw); } catch { return; }
   const deviceId = Array.isArray(devices) ? devices[0]?.id : devices?.id;
-  if (!deviceId) { console.log("[relay] No SMS device found"); return; }
+  if (!deviceId) { console.log("[relay] No SMS device found in response"); return; }
 
   const since = new Date(Date.now() - POLL_INTERVAL - 30000).toISOString();
   const until = new Date().toISOString();
 
-  smsApi("POST", "/api/3rdparty/v1/messages/inbox/export", { deviceId, since, until });
-  console.log(`[relay] Triggered SMS inbox export for device ${deviceId}`);
+  const exportResult = smsApi("POST", "/3rdparty/v1/messages/inbox/export", { deviceId, since, until });
+  console.log(`[relay] Export triggered for device ${deviceId} (${since.slice(11,19)} - ${until.slice(11,19)}) → ${exportResult || "(202 accepted)"}`);
 }
 
 // ── SMS summary builder ──────────────────────────────────────────────────────

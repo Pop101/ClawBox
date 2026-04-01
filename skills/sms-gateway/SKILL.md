@@ -21,7 +21,7 @@ curl -u "$SMS_GATEWAY_USERNAME:$SMS_GATEWAY_PASSWORD" ...
 ## Send SMS
 
 ```bash
-curl -X POST "$SMS_GATEWAY_URL/api/3rdparty/v1/message" \
+curl -X POST "$SMS_GATEWAY_URL/3rdparty/v1/message" \
   -u "$SMS_GATEWAY_USERNAME:$SMS_GATEWAY_PASSWORD" \
   -H "Content-Type: application/json" \
   -d '{
@@ -60,7 +60,7 @@ curl -X POST "$SMS_GATEWAY_URL/api/3rdparty/v1/message" \
 
 **Send to multiple recipients:**
 ```bash
-curl -X POST "$SMS_GATEWAY_URL/api/3rdparty/v1/message" \
+curl -X POST "$SMS_GATEWAY_URL/3rdparty/v1/message" \
   -u "$SMS_GATEWAY_USERNAME:$SMS_GATEWAY_PASSWORD" \
   -H "Content-Type: application/json" \
   -d '{
@@ -72,7 +72,7 @@ curl -X POST "$SMS_GATEWAY_URL/api/3rdparty/v1/message" \
 ## Check Message Status
 
 ```bash
-curl "$SMS_GATEWAY_URL/api/3rdparty/v1/message/{messageId}" \
+curl "$SMS_GATEWAY_URL/3rdparty/v1/message/{messageId}" \
   -u "$SMS_GATEWAY_USERNAME:$SMS_GATEWAY_PASSWORD"
 ```
 
@@ -100,7 +100,7 @@ curl "$SMS_GATEWAY_URL/api/3rdparty/v1/message/{messageId}" \
 
 ```bash
 # Get all received messages
-curl "$SMS_GATEWAY_URL/api/3rdparty/v1/message?status=received" \
+curl "$SMS_GATEWAY_URL/3rdparty/v1/message?status=received" \
   -u "$SMS_GATEWAY_USERNAME:$SMS_GATEWAY_PASSWORD"
 ```
 
@@ -120,7 +120,7 @@ curl "$SMS_GATEWAY_URL/api/3rdparty/v1/message?status=received" \
 
 ```bash
 # Get all sent messages
-curl "$SMS_GATEWAY_URL/api/3rdparty/v1/message" \
+curl "$SMS_GATEWAY_URL/3rdparty/v1/message" \
   -u "$SMS_GATEWAY_USERNAME:$SMS_GATEWAY_PASSWORD"
 ```
 
@@ -147,15 +147,15 @@ Other webhook events: `sms:sent`, `sms:delivered`, `sms:failed`
 
 ```bash
 # Get connected device status
-curl "$SMS_GATEWAY_URL/api/3rdparty/v1/device" \
+curl "$SMS_GATEWAY_URL/3rdparty/v1/device" \
   -u "$SMS_GATEWAY_USERNAME:$SMS_GATEWAY_PASSWORD"
 ```
 
 ## Common Patterns
 
 ### Reply to the last text from a contact
-1. `GET /api/3rdparty/v1/message?status=received` — find the message
-2. `POST /api/3rdparty/v1/message` — send reply to the sender's number
+1. `GET /3rdparty/v1/message?status=received` — find the message
+2. `POST /3rdparty/v1/message` — send reply to the sender's number
 
 ### Send an SMS to a contact by name
 Look up the phone number from:
@@ -165,7 +165,7 @@ Look up the phone number from:
 Then send via the API.
 
 ### Check if a message was delivered
-Poll `GET /api/3rdparty/v1/message/{id}` until state is `Delivered` or `Failed`.
+Poll `GET /3rdparty/v1/message/{id}` until state is `Delivered` or `Failed`.
 
 ## Environment Variables
 
