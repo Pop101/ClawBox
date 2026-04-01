@@ -1,4 +1,4 @@
-# OpenClaw Personal AI — Docker Image
+# ClawBox - Fully Containerized Instant Image
 
 A fully self-contained OpenClaw deployment that acts as a personal AI assistant with real-world agency. Talk to it on Telegram — it handles email, SMS, phone calls, web browsing, scheduling, coding, and more.
 
