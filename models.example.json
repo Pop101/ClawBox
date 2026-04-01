@@ -1,0 +1,81 @@
+{
+  "order": ["claude", "remote", "local", "gemini"],
+
+  "providers": {
+    "claude": {
+      "alias": "haiku",
+      "provider": "anthropic",
+      "api": "anthropic-messages",
+      "baseUrl": "https://api.anthropic.com",
+      "apiKeyEnv": "ANTHROPIC_API_KEY",
+      "modelEnv": "CLAUDE_MODEL_NAME",
+      "contextWindow": 200000,
+      "input": ["text", "image"],
+      "cost": { "input": 1, "output": 5, "cacheRead": 0.1, "cacheWrite": 1.25 },
+      "cache": true,
+      "extras": {
+        "upgradeModel": "claude-sonnet-4-6",
+        "upgradeAlias": "sonnet",
+        "upgradeCost": { "input": 3, "output": 15, "cacheRead": 0.3, "cacheWrite": 3.75 },
+        "upgradeContextWindow": 1000000
+      }
+    },
+    "remote": {
+      "alias": "remote",
+      "provider": "remote",
+      "api": "openai-completions",
+      "baseUrlEnv": "REMOTE_BASE_URL",
+      "apiKeyEnv": "REMOTE_API_KEY",
+      "modelEnv": "REMOTE_MODEL_NAME",
+      "contextWindowEnv": "REMOTE_CONTEXT_WINDOW",
+      "cost": { "input": 0.45, "output": 2.2, "cacheRead": 0, "cacheWrite": 0 }
+    },
+    "local": {
+      "alias": "local",
+      "provider": "selfhost",
+      "apiEnv": "SELFHOST_API_TYPE",
+      "baseUrlEnv": "SELFHOST_BASE_URL",
+      "apiKeyEnv": "SELFHOST_API_KEY",
+      "modelEnv": "SELFHOST_MODEL_NAME",
+      "contextWindowEnv": "SELFHOST_CONTEXT_WINDOW",
+      "input": ["text"],
+      "cost": { "input": 0, "output": 0, "cacheRead": 0, "cacheWrite": 0 }
+    },
+    "gemini": {
+      "alias": "gemini",
+      "provider": "google",
+      "api": "google-generative-ai",
+      "baseUrl": "https://generativelanguage.googleapis.com/v1beta",
+      "apiKeyEnv": "GEMINI_API_KEY",
+      "modelEnv": "GEMINI_MODEL_NAME",
+      "contextWindow": 1048576,
+      "input": ["text", "image"],
+      "cost": { "input": 0.5, "output": 3, "cacheRead": 0.05, "cacheWrite": 0.5 },
+      "vision": true
+    }
+  },
+
+  "mcpServers": {
+    "example-remote": {
+      "url": "https://your-mcp-server.example.com/mcp",
+      "auth": "Bearer your-token",
+      "description": "Example remote MCP server (proxied via stdio)"
+    },
+    "example-local": {
+      "command": "npx",
+      "args": ["-y", "@modelcontextprotocol/server-filesystem", "/data"],
+      "description": "Example local stdio MCP server"
+    },
+    "notion": {
+      "url": "https://mcp.notion.com/mcp",
+      "oauthFile": "/home/clawuser/credentials/notion-oauth.json",
+      "description": "Notion — personal OAuth, no integration needed. Run: node scripts/notion-auth.js"
+    },
+    "claude-code": {
+      "command": "claude",
+      "args": ["mcp", "serve"],
+      "env": { "ANTHROPIC_API_KEY": "{{ANTHROPIC_API_KEY}}" },
+      "description": "Claude Code — read, edit, search files, run shell commands, and perform coding tasks"
+    }
+  }
+}

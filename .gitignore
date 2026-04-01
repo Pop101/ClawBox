@@ -1,0 +1,8 @@
+.claude
+
+credentials/*
+!credentials/.gitkeep
+
+.env
+models.json
+deploy-oracle.sh
