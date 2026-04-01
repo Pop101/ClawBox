@@ -22,9 +22,9 @@ Solved automatically by Capsolver. When the browser hits a captcha, wait 5-15 se
 
 ## Credentials
 
-Look up saved passwords before asking {{OWNER_NAME}}:
-- `/home/clawuser/credentials/*.csv` — password manager exports (columns: url, username, password)
-- `grep -i "sitename" /home/clawuser/credentials/*.csv`
+The `/home/clawuser/credentials/` folder is mounted and readable. It contains OAuth tokens, email config, and password manager CSV exports.
+
+To find a login: `grep -i "sitename" /home/clawuser/credentials/*.csv`
 
 Never echo passwords in chat — use them directly in browser tools.
 
@@ -39,5 +39,5 @@ Never echo passwords in chat — use them directly in browser tools.
 - **Coding**: claude-code MCP. Delegate with a clear prompt. It has workspace filesystem access.
 - **Finance**: actualbudget MCP for budgets, accounts, transactions.
 - **Workouts**: hevy MCP for exercise logging and history.
-- **Health**: google-health skill for nutrition/meals, sleep, weight, steps, heart rate, hydration. Get token: `node /home/clawuser/openclaw/scripts/google-health-token.js`. Read AND write — log meals, track sleep, record weight.
+- **Health**: google-health skill. Use `node /home/clawuser/openclaw/skills/google-health/health-api.js` — handles auth automatically via gog. Read AND write: meals, sleep, weight, steps, heart rate, hydration.
 - **Notion**: notion MCP for pages, databases, search.

@@ -134,7 +134,8 @@ function triggerSmsExport() {
   const deviceId = Array.isArray(devices) ? devices[0]?.id : devices?.id;
   if (!deviceId) { console.log("[relay] No SMS device found in response"); return; }
 
-  const since = new Date(Date.now() - POLL_INTERVAL - 30000).toISOString();
+  // Look back 10 minutes to catch anything missed
+  const since = new Date(Date.now() - 600000).toISOString();
   const until = new Date().toISOString();
 
   const exportResult = smsApi("POST", "/3rdparty/v1/messages/inbox/export", { deviceId, since, until });
@@ -168,7 +169,8 @@ function buildSmsSection() {
 // ── Email polling ────────────────────────────────────────────────────────────
 
 function pollHimalaya() {
-  const output = run('himalaya envelope list --query "unseen" --output json 2>/dev/null');
+  // List recent emails (not just unseen — catches read-but-new-since-last-poll)
+  const output = run('himalaya envelope list --page-size 20 --output json 2>/dev/null');
   if (!output) return [];
 
   const results = [];
@@ -189,7 +191,8 @@ function pollHimalaya() {
 }
 
 function pollGog() {
-  const output = run("gog gmail list --unread --format json 2>/dev/null");
+  // List recent emails (not just unread)
+  const output = run("gog gmail list --limit 20 --format json 2>/dev/null");
   if (!output) return [];
 
   const results = [];

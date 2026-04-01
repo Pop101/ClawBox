@@ -47,7 +47,7 @@ RUN curl -fsSL https://cli.github.com/packages/githubcli-archive-keyring.gpg | d
 RUN useradd --create-home --shell /bin/bash clawuser
 WORKDIR /home/clawuser/openclaw
 
-COPY scripts/ /home/clawuser/openclaw/scripts/
+COPY harness/ /home/clawuser/openclaw/harness/
 COPY prompts/ /home/clawuser/openclaw/prompts/
 COPY skills/ /home/clawuser/openclaw/skills/
 COPY models.json /home/clawuser/openclaw/models.json
@@ -129,4 +129,4 @@ RUN npx playwright install chromium
 
 EXPOSE 18789
 
-CMD ["bash", "-l", "/home/clawuser/openclaw/scripts/entrypoint.sh"]
+CMD ["bash", "-l", "/home/clawuser/openclaw/harness/entrypoint.sh"]

@@ -55,11 +55,11 @@ fi
 
 # ── Generate config ──────────────────────────────────────────────────────────
 echo "[entrypoint] Generating openclaw.json..."
-node "$HOME/openclaw/scripts/generate-config.js"
+node "$HOME/openclaw/harness/generate-config.js"
 
-# ── Doctor ───────────────────────────────────────────────────────────────────
+# ── Doctor (read-only — do NOT use --fix, it overwrites our config) ───────────
 echo "[entrypoint] Running openclaw doctor..."
-openclaw doctor --fix 2>&1 || true
+openclaw doctor 2>&1 || true
 
 # ── GitHub CLI ───────────────────────────────────────────────────────────────
 if [ -n "${GITHUB_TOKEN:-}" ] || [ -n "${GH_TOKEN:-}" ]; then
@@ -87,12 +87,42 @@ if [ "$GOG_OK" = true ] && ls "$CREDS_DIR"/gog-token*.json 1> /dev/null 2>&1; th
   echo "[entrypoint] Google Workspace ready"
 fi
 
-# ── Auto-approve all tools ────────────────────────────────────────────────────
-# This is a personal container — all tool execution is pre-approved.
-# Device/chat pairing is still enforced via channel allowlists (TELEGRAM_ALLOW_FROM etc).
-echo "[entrypoint] Auto-approving all tools..."
-openclaw approvals allowlist add --agent "*" "*" 2>&1 || true
+# ── Auto-approve all tool execution ───────────────────────────────────────────
+# security: "full" = allow all exec without prompts (equivalent to elevated)
+# Chat pairing is still enforced via channel allowlists (TELEGRAM_ALLOW_FROM etc).
+echo "[entrypoint] Auto-approving all tools (security: full)..."
+cat > "$HOME/.openclaw/exec-approvals.json" <<APPROVALS
+{
+  "version": 1,
+  "socket": {
+    "path": "$HOME/.openclaw/exec-approvals.sock",
+    "token": "openclaw-auto-approve"
+  },
+  "defaults": {
+    "security": "full",
+    "ask": "off",
+    "askFallback": "full",
+    "autoAllowSkills": true
+  },
+  "agents": {
+    "*": {
+      "security": "full",
+      "ask": "off",
+      "askFallback": "full",
+      "autoAllowSkills": true,
+      "allowlist": [{ "pattern": "*" }]
+    },
+    "main": {
+      "security": "full",
+      "ask": "off",
+      "askFallback": "full",
+      "autoAllowSkills": true,
+      "allowlist": [{ "pattern": "*" }]
+    }
+  }
+}
+APPROVALS
 
 # ── Hand off to supervisord ──────────────────────────────────────────────────
 echo "[entrypoint] Starting services via supervisord..."
-exec supervisord -c "$HOME/openclaw/scripts/supervisord.conf"
+exec supervisord -c "$HOME/openclaw/harness/supervisord.conf"

@@ -41,12 +41,13 @@ sh rebuild.sh                         # build and run
 ## Architecture
 
 ```
-models.json          — model providers, fallback order, MCP servers
-.env                 — channel + tool credentials only
+models.json          — model providers, fallback order, MCP servers (gitignored)
+.env                 — channel + tool credentials (gitignored)
 prompts/             — SOUL.md, AGENTS.md, SYSTEM.md, USER.md, HEARTBEAT.md
-skills/              — bundled skill SKILL.md files (tavily, himalaya, reclaim, sms-gateway)
-scripts/             — generate-config.js, stealth-browser.js, relay.js, mcp-http-proxy.js
-credentials/         — password exports, OAuth tokens, himalaya config
+skills/              — bundled skills with SKILL.md + tools (health-api.js, etc.)
+harness/             — container runtime: entrypoint, config generator, browser, relay, supervisord
+scripts/             — host-side setup scripts (gog-health-auth.sh, notion-auth.js)
+credentials/         — password exports, OAuth tokens, himalaya config (gitignored)
 ```
 
 ## Configuration
@@ -108,31 +109,25 @@ One-time registration inside the container — see `signal-cli` docs.
 
 ### Tools
 
-#### Google Workspace (gog CLI)
+#### Google Workspace + Health API (gog CLI)
+
+One token for both Google Workspace and Health API.
 
 1. Create OAuth client (Desktop App) at [console.cloud.google.com](https://console.cloud.google.com)
-2. Save client secret as `credentials/credentials.json`
-3. Authenticate:
+2. Enable the [Google Health API](https://console.cloud.google.com/apis/api/health.googleapis.com) in your project
+3. Save client secret as `credentials/credentials.json`
+4. Authenticate with Workspace + health scopes:
+```bash
+bash scripts/gog-health-auth.sh you@company.com
+```
+This opens a browser, requests all Workspace services plus health scopes (nutrition, sleep, activity, metrics), and saves the token.
+
+If you don't need the Health API, use plain gog auth instead:
 ```bash
 gog auth credentials credentials/credentials.json
 gog auth add you@company.com --services user
 gog auth tokens export you@company.com --out credentials/gog-token.json --overwrite
 ```
-
-#### Google Health API
-
-Nutrition, sleep, weight, steps, heart rate, exercise. Requires a separate OAuth token with health scopes.
-
-1. Enable the [Google Health API](https://console.cloud.google.com/apis/api/health.googleapis.com) in your Cloud project
-2. Add `http://localhost:9877/callback` as a redirect URI in your OAuth client settings
-3. Run:
-```bash
-node scripts/google-health-auth.js
-```
-4. Approve in browser → token saved to `credentials/google-health-token.json`
-5. Rebuild: `sh rebuild.sh`
-
-The token auto-refreshes inside the container. The agent uses it to read/write meals, sleep, weight, and all other health data.
 
 #### GitHub
 

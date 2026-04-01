@@ -270,7 +270,7 @@ if (modelsJson.mcpServers) {
 const config = {
   gateway: {
     mode: "local",
-    trustLoopback: true,
+    auth: { mode: "none" },
   },
   browser,
   ...(Object.keys(mcpServers).length > 0 ? { mcp: { servers: mcpServers } } : {}),
