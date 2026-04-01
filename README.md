@@ -14,6 +14,14 @@ A fully self-contained OpenClaw deployment that acts as a personal AI assistant 
 - **Process management** — supervisord manages gateway, stealth browser, and relay with auto-restart.
 - **Cost controls** — prompt caching, context pruning, quiet hours, heartbeat on cheapest model.
 
+## Cheapest setup (~$10/month)
+
+**Model:** [Z.ai](https://z.ai) `glm-5-turbo` — free $10/month credits on signup. Fast, 200K context, good at tool use. Set as primary in `models.json`.
+
+**Hosting:** [Oracle Cloud Always Free](https://www.oracle.com/cloud/free/) — 4 ARM OCPUs, 24GB RAM, 200GB storage, free forever.
+
+Add a fallback (Llama.cpp, OpenRouter, etc.) for when Z.ai credits run out. I recommend [Qwen 35 Claude 4.6 Opus Reasoning](https://huggingface.co/mradermacher/Qwen3.5-27B-Claude-4.6-Opus-Reasoning-Distilled-i1-GGUF) - 27B parameters, vision support, works on consumer hardware.
+
 ## Quick start
 
 ```bash
