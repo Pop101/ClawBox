@@ -4,8 +4,7 @@
 // Email: polls himalaya (IMAP) and gog (Gmail) every 2 minutes
 // SMS: triggers inbox export → receives webhooks on port 18790 → batches
 //
-// Env vars: SMS_GATEWAY_URL, SMS_GATEWAY_USERNAME, SMS_GATEWAY_PASSWORD,
-//           TELEGRAM_ALLOW_FROM (used as target for openclaw message send)
+// Env vars: SMS_GATEWAY_URL, SMS_GATEWAY_USERNAME, SMS_GATEWAY_PASSWORD
 
 const http = require("node:http");
 const fs = require("node:fs");
@@ -14,7 +13,6 @@ const { execSync } = require("node:child_process");
 const SMS_URL = process.env.SMS_GATEWAY_URL;
 const SMS_USER = process.env.SMS_GATEWAY_USERNAME;
 const SMS_PASS = process.env.SMS_GATEWAY_PASSWORD;
-const CHAT_ID = process.env.TELEGRAM_ALLOW_FROM || "";
 const WEBHOOK_PORT = Number.parseInt(process.env.RELAY_PORT || "18790", 10);
 const POLL_INTERVAL = Number.parseInt(process.env.RELAY_POLL_INTERVAL || "120000", 10);
 
@@ -38,9 +36,9 @@ function smsApi(method, path, body) {
 
 function sendToAgent(text) {
   if (!text.trim()) return;
-  // Use openclaw CLI to send message — works with whatever channel is active
+  // Inject into the most recent conversation — wherever the user last chatted
   const escaped = text.trim().replaceAll("'", String.raw`'\''`);
-  const result = run(`openclaw message send --channel telegram --target "${CHAT_ID}" --message '${escaped}' 2>&1`);
+  const result = run(`openclaw agent --channel last --deliver --message '${escaped}' 2>&1`);
   if (result.includes("Error") || result.includes("error")) {
     console.error("[relay] Send failed:", result.slice(0, 200));
   }
