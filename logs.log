@@ -1,0 +1,189 @@
+2026-04-02T18:36:35.510209046Z stdout F [entrypoint] Copying skill: ai-humanizer
+2026-04-02T18:36:35.573545531Z stdout F [entrypoint] Copying skill: clawdbot-filesystem
+2026-04-02T18:36:35.573573892Z stdout F [entrypoint] Copying skill: cron
+2026-04-02T18:36:35.573577132Z stdout F [entrypoint] Copying skill: ddg-web-search
+2026-04-02T18:36:35.573578972Z stdout F [entrypoint] Copying skill: http
+2026-04-02T18:36:35.573580652Z stdout F [entrypoint] Copying skill: jina-ai-reader
+2026-04-02T18:36:35.573582212Z stdout F [entrypoint] Copying skill: openclaw-memory
+2026-04-02T18:36:35.573583772Z stdout F [entrypoint] Copying skill: vapi
+2026-04-02T18:36:35.573585372Z stdout F [entrypoint] Copying skill: google-health
+2026-04-02T18:36:35.573587172Z stdout F [entrypoint] Copying skill: himalaya
+2026-04-02T18:36:35.573588732Z stdout F [entrypoint] Copying skill: reclaim
+2026-04-02T18:36:35.573590212Z stdout F [entrypoint] Copying skill: sms-gateway
+2026-04-02T18:36:35.573591852Z stdout F [entrypoint] Copying skill: tavily-search
+2026-04-02T18:36:35.587083261Z stdout F [entrypoint] Seeded SOUL.md
+2026-04-02T18:36:35.587101181Z stdout F [entrypoint] Seeded AGENTS.md
+2026-04-02T18:36:35.587103381Z stdout F [entrypoint] Seeded USER.md
+2026-04-02T18:36:35.587105141Z stdout F [entrypoint] Seeded HEARTBEAT.md
+2026-04-02T18:36:35.587106781Z stdout F [entrypoint] Generating openclaw.json...
+2026-04-02T18:36:35.746130022Z stdout F   MCP: hevy (proxied from https://mcp.leibmann.org/hevy/sse)
+2026-04-02T18:36:35.746144902Z stdout F   MCP: actualbudget (proxied from https://mcp.leibmann.org/actual/sse)
+2026-04-02T18:36:35.746147182Z stdout F   MCP: notion (proxied from https://mcp.notion.com/mcp)
+2026-04-02T18:36:35.746149342Z stdout F   MCP: claude-code
+2026-04-02T18:36:35.787469257Z stdout F Generated /home/clawuser/config/openclaw.json
+2026-04-02T18:36:35.787493298Z stdout F   Chain:     zhipu/glm-5-turbo -> zhipu-vision/glm-4.6v -> remote/minimax/minimax-m2.7 -> anthropic/claude-haiku-4-5 -> selfhost/Qwen3.5-27B-Claude-4.6-Opus-Reasoning-Distilled.i1-Q6_K.gguf -> google/gemini-3.1-flash-preview
+2026-04-02T18:36:35.787497658Z stdout F   Vision:    zhipu-vision/glm-4.6v
+2026-04-02T18:36:35.787499898Z stdout F   Heartbeat: zhipu/glm-5-turbo
+2026-04-02T18:36:35.787501538Z stdout F   Context:   128,000 tokens (per-model min)
+2026-04-02T18:36:35.787510578Z stdout F   Cache:     none (ttl=1h)
+2026-04-02T18:36:35.787514178Z stdout F   Browser:   managed only
+2026-04-02T18:36:35.787516458Z stdout F   Providers: zhipu, zhipu-vision, remote, anthropic, selfhost, google
+2026-04-02T18:36:35.792326384Z stdout F [entrypoint] Running openclaw doctor...
+2026-04-02T18:36:39.415076195Z stdout F ▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄
+2026-04-02T18:36:39.415099075Z stdout F ██░▄▄▄░██░▄▄░██░▄▄▄██░▀██░██░▄▄▀██░████░▄▄▀██░███░██
+2026-04-02T18:36:39.415101355Z stdout F ██░███░██░▀▀░██░▄▄▄██░█░█░██░█████░████░▀▀░██░█░█░██
+2026-04-02T18:36:39.415103075Z stdout F ██░▀▀▀░██░█████░▀▀▀██░██▄░██░▀▀▄██░▀▀░█░██░██▄▀▄▀▄██
+2026-04-02T18:36:39.415104715Z stdout F ▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀
+2026-04-02T18:36:39.415106555Z stdout F                   🦞 OPENCLAW 🦞                    
+2026-04-02T18:36:39.415108115Z stdout F  
+2026-04-02T18:36:39.415109675Z stdout F ┌  OpenClaw doctor
+2026-04-02T18:36:39.491098002Z stdout F │
+2026-04-02T18:36:39.491122322Z stdout F ◇  Startup optimization ─────────────────────────────────────────────────╮
+2026-04-02T18:36:39.491135802Z stdout F │                                                                        │
+2026-04-02T18:36:39.491138122Z stdout F │  - NODE_COMPILE_CACHE is not set; repeated CLI runs can be slower on   │
+2026-04-02T18:36:39.491139802Z stdout F │    small hosts (Pi/VM).                                                │
+2026-04-02T18:36:39.491141322Z stdout F │  - OPENCLAW_NO_RESPAWN is not set to 1; set it to avoid extra startup  │
+2026-04-02T18:36:39.491142842Z stdout F │    overhead from self-respawn.                                         │
+2026-04-02T18:36:39.491144562Z stdout F │  - Suggested env for low-power hosts:                                  │
+2026-04-02T18:36:39.491146162Z stdout F │    export NODE_COMPILE_CACHE=/var/tmp/openclaw-compile-cache           │
+2026-04-02T18:36:39.491147602Z stdout F │    mkdir -p /var/tmp/openclaw-compile-cache                            │
+2026-04-02T18:36:39.491149082Z stdout F │    export OPENCLAW_NO_RESPAWN=1                                        │
+2026-04-02T18:36:39.491150602Z stdout F │                                                                        │
+2026-04-02T18:36:39.491152482Z stdout F ├────────────────────────────────────────────────────────────────────────╯
+2026-04-02T18:36:39.611081989Z stdout F │
+2026-04-02T18:36:39.611099909Z stdout F ◇  Doctor changes ─────────────────────────────╮
+2026-04-02T18:36:39.61110299Z stdout F │                                              │
+2026-04-02T18:36:39.61110471Z stdout F │  browser configured, enabled automatically.  │
+2026-04-02T18:36:39.61110643Z stdout F │                                              │
+2026-04-02T18:36:39.61111003Z stdout F ├──────────────────────────────────────────────╯
+2026-04-02T18:36:39.763096883Z stdout F │
+2026-04-02T18:36:39.763116603Z stdout F ◇  Doctor ──────────────────────────────────────────────╮
+2026-04-02T18:36:39.763119204Z stdout F │                                                       │
+2026-04-02T18:36:39.763120884Z stdout F │  Run "openclaw doctor --fix" to apply these changes.  │
+2026-04-02T18:36:39.763122484Z stdout F │                                                       │
+2026-04-02T18:36:39.763124524Z stdout F ├───────────────────────────────────────────────────────╯
+2026-04-02T18:36:40.935249495Z stdout F │
+2026-04-02T18:36:40.935280615Z stdout F ◇  Gateway auth ──────────────────────────────────────────────────╮
+2026-04-02T18:36:40.935285215Z stdout F │                                                                 │
+2026-04-02T18:36:40.935287095Z stdout F │  Gateway auth is off or missing a token. Token auth is now the  │
+2026-04-02T18:36:40.935288815Z stdout F │  recommended default (including loopback).                      │
+2026-04-02T18:36:40.935290295Z stdout F │                                                                 │
+2026-04-02T18:36:40.935292055Z stdout F ├─────────────────────────────────────────────────────────────────╯
+2026-04-02T18:36:41.179499111Z stdout F │
+2026-04-02T18:36:41.179531351Z stdout F ◇  State integrity ─────────────────────────────────────────────────────╮
+2026-04-02T18:36:41.179534831Z stdout F │                                                                       │
+2026-04-02T18:36:41.179548911Z stdout F │  - State directory permissions are too open (~/.openclaw). Recommend  │
+2026-04-02T18:36:41.179550711Z stdout F │    chmod 700.                                                         │
+2026-04-02T18:36:41.179552191Z stdout F │  - Config file is group/world readable (~/config/openclaw.json).      │
+2026-04-02T18:36:41.179553831Z stdout F │    Recommend chmod 600.                                               │
+2026-04-02T18:36:41.179555911Z stdout F │  - OAuth dir not present (~/.openclaw/credentials). Skipping create   │
+2026-04-02T18:36:41.179557391Z stdout F │    because no WhatsApp/pairing channel config is active.              │
+2026-04-02T18:36:41.179558831Z stdout F │  - CRITICAL: Session store dir missing                                │
+2026-04-02T18:36:41.179560311Z stdout F │    (~/.openclaw/agents/main/sessions).                                │
+2026-04-02T18:36:41.179561911Z stdout F │                                                                       │
+2026-04-02T18:36:41.179563711Z stdout F ├───────────────────────────────────────────────────────────────────────╯
+2026-04-02T18:36:41.179565391Z stdout F │
+2026-04-02T18:36:41.179567511Z stdout F ◇  Security ─────────────────────────────────╮
+2026-04-02T18:36:41.179569551Z stdout F │                                            │
+2026-04-02T18:36:41.179571272Z stdout F │  - No channel security warnings detected.  │
+2026-04-02T18:36:41.179572712Z stdout F │  - Run: openclaw security audit --deep     │
+2026-04-02T18:36:41.179574312Z stdout F │                                            │
+2026-04-02T18:36:41.179576072Z stdout F ├────────────────────────────────────────────╯
+2026-04-02T18:36:41.593033546Z stdout F │
+2026-04-02T18:36:41.593083547Z stdout F ◇  Skills status ────────────╮
+2026-04-02T18:36:41.593087067Z stdout F │                            │
+2026-04-02T18:36:41.593088947Z stdout F │  Eligible: 23              │
+2026-04-02T18:36:41.593090507Z stdout F │  Missing requirements: 40  │
+2026-04-02T18:36:41.593092147Z stdout F │  Blocked by allowlist: 0   │
+2026-04-02T18:36:41.593093947Z stdout F │                            │
+2026-04-02T18:36:41.593095747Z stdout F ├────────────────────────────╯
+2026-04-02T18:36:42.771067974Z stdout F │
+2026-04-02T18:36:42.771102214Z stdout F ◇  Plugins ──────╮
+2026-04-02T18:36:42.771106054Z stdout F │                │
+2026-04-02T18:36:42.771107894Z stdout F │  Loaded: 43    │
+2026-04-02T18:36:42.771109614Z stdout F │  Disabled: 42  │
+2026-04-02T18:36:42.771111214Z stdout F │  Errors: 0     │
+2026-04-02T18:36:42.771112774Z stdout F │                │
+2026-04-02T18:36:42.771114574Z stdout F ├────────────────╯
+2026-04-02T18:36:42.851112339Z stdout F │
+2026-04-02T18:36:42.85114046Z stdout F ◇  Gateway ──────────────╮
+2026-04-02T18:36:42.85114438Z stdout F │                        │
+2026-04-02T18:36:42.85115106Z stdout F │  Gateway not running.  │
+2026-04-02T18:36:42.85115342Z stdout F │                        │
+2026-04-02T18:36:42.85115538Z stdout F ├────────────────────────╯
+2026-04-02T18:36:42.851702105Z stdout F │
+2026-04-02T18:36:42.851721185Z stdout F ◇  Gateway connection ──────────────────────────╮
+2026-04-02T18:36:42.851724385Z stdout F │                                               │
+2026-04-02T18:36:42.851736145Z stdout F │  Gateway target: ws://127.0.0.1:18789         │
+2026-04-02T18:36:42.851738025Z stdout F │  Source: local loopback                       │
+2026-04-02T18:36:42.851739585Z stdout F │  Config: /home/clawuser/config/openclaw.json  │
+2026-04-02T18:36:42.851741185Z stdout F │  Bind: loopback                               │
+2026-04-02T18:36:42.851742745Z stdout F │                                               │
+2026-04-02T18:36:42.851744705Z stdout F ├───────────────────────────────────────────────╯
+2026-04-02T18:36:43.160859022Z stdout F │
+2026-04-02T18:36:43.160889622Z stdout F ◇  Gateway ────────────────────────────────────────────────────────────────╮
+2026-04-02T18:36:43.160893422Z stdout F │                                                                          │
+2026-04-02T18:36:43.160895382Z stdout F │  systemd user services are unavailable; install/enable systemd or run    │
+2026-04-02T18:36:43.160897102Z stdout F │  the gateway under your supervisor.                                      │
+2026-04-02T18:36:43.160898702Z stdout F │  If you're in a container, run the gateway in the foreground instead of  │
+2026-04-02T18:36:43.160900342Z stdout F │  `openclaw gateway`.                                                     │
+2026-04-02T18:36:43.160902182Z stdout F │                                                                          │
+2026-04-02T18:36:43.160904142Z stdout F ├──────────────────────────────────────────────────────────────────────────╯
+2026-04-02T18:36:43.162522358Z stdout F Run "openclaw doctor --fix" to apply changes.
+2026-04-02T18:36:43.269692183Z stdout F │
+2026-04-02T18:36:43.269715743Z stdout F └  Doctor complete.
+2026-04-02T18:36:43.269730903Z stdout F 
+2026-04-02T18:36:43.302592578Z stdout F [entrypoint] GitHub CLI authenticated via env var
+2026-04-02T18:36:43.428440101Z stdout F GOG_KEYRING_PASSWORD found in environment.
+2026-04-02T18:36:43.428524582Z stdout F written	true
+2026-04-02T18:36:43.428562103Z stdout F path	/home/clawuser/.config/gogcli/config.json
+2026-04-02T18:36:43.428607863Z stdout F keyring_backend	file
+2026-04-02T18:36:43.436602899Z stdout F [entrypoint] Auto-approving all tools (security: full)...
+2026-04-02T18:36:43.439635168Z stdout F [entrypoint] Starting services via supervisord...
+2026-04-02T18:36:43.799638452Z stdout F 2026-04-02 18:36:43,799 INFO supervisord started with pid 1
+2026-04-02T18:36:44.802580445Z stdout F 2026-04-02 18:36:44,802 INFO spawned: 'tunnel' with pid 86
+2026-04-02T18:36:44.804691705Z stdout F 2026-04-02 18:36:44,804 INFO spawned: 'tunnel-watcher' with pid 87
+2026-04-02T18:36:44.806744084Z stdout F 2026-04-02 18:36:44,806 INFO spawned: 'stealth-browser' with pid 88
+2026-04-02T18:36:44.821098742Z stdout F 2026-04-02 18:36:44,820 INFO spawned: 'relay' with pid 89
+2026-04-02T18:36:44.822944599Z stdout F 2026-04-02 18:36:44,822 INFO spawned: 'gateway' with pid 90
+2026-04-02T18:36:44.831691403Z stdout F [tunnel-watcher] Monitoring tunnel...
+2026-04-02T18:36:44.835678401Z stdout F 2026-04-02 18:36:44,835 INFO success: tunnel-watcher entered RUNNING state, process has stayed up for > than 0 seconds (startsecs)
+2026-04-02T18:36:44.992795544Z stdout F [relay] Webhook listener on port 18790, polling every 120s
+2026-04-02T18:36:44.998220076Z stdout F [relay] SMS: enabled
+2026-04-02T18:36:44.999021724Z stdout F [relay] Tunnel: waiting...
+2026-04-02T18:36:45.084262699Z stderr F 2026-04-02T18:36:45Z INF Thank you for trying Cloudflare Tunnel. Doing so, without a Cloudflare account, is a quick way to experiment and try it out. However, be aware that these account-less Tunnels have no uptime guarantee, are subject to the Cloudflare Online Services Terms of Use (https://www.cloudflare.com/website-terms/), and Cloudflare reserves the right to investigate your use of Tunnels for violations of such terms. If you intend to use Tunnels in production you should use a pre-created named tunnel by following: https://developers.cloudflare.com/cloudflare-one/connections/connect-apps
+2026-04-02T18:36:45.084639622Z stderr F 2026-04-02T18:36:45Z INF Requesting new quick Tunnel on trycloudflare.com...
+2026-04-02T18:36:45.478355068Z stdout F [stealth-browser] Chromium path: /ms-playwright/chromium-1217/chrome-linux64/chrome
+2026-04-02T18:36:45.482867791Z stdout F [stealth-browser] DISPLAY: :99
+2026-04-02T18:36:45.483295436Z stdout F [stealth-browser] User data dir: /tmp/stealth-browser-KpRIs0
+2026-04-02T18:36:45.483701599Z stderr F [stealth-browser] Capsolver extension not found at /opt/capsolver-extension
+2026-04-02T18:36:45.483936442Z stdout F [stealth-browser] headless=new (extensions supported in new headless mode)
+2026-04-02T18:36:47.803484788Z stdout F [stealth-browser] ready on http://127.0.0.1:9223
+2026-04-02T18:36:47.805110603Z stdout F 2026-04-02 18:36:47,805 INFO success: stealth-browser entered RUNNING state, process has stayed up for > than 3 seconds (startsecs)
+2026-04-02T18:36:47.805498567Z stdout F [stealth-browser] ws endpoint: ws://127.0.0.1:9223/devtools/browser/9623ef67-98d3-4649-af49-dc841ed5983b
+2026-04-02T18:36:47.805693889Z stdout F [stealth-browser] capsolver: disabled
+2026-04-02T18:36:48.575201889Z stderr F 2026-04-02T18:36:48Z INF +--------------------------------------------------------------------------------------------+
+2026-04-02T18:36:48.575241649Z stderr F 2026-04-02T18:36:48Z INF |  Your quick Tunnel has been created! Visit it at (it may take some time to be reachable):  |
+2026-04-02T18:36:48.575245409Z stderr F 2026-04-02T18:36:48Z INF |  https://collaboration-workers-portal-sanyo.trycloudflare.com                              |
+2026-04-02T18:36:48.575248049Z stderr F 2026-04-02T18:36:48Z INF +--------------------------------------------------------------------------------------------+
+2026-04-02T18:36:48.575249969Z stderr F 2026-04-02T18:36:48Z INF Cannot determine default configuration path. No file [config.yml config.yaml] in [~/.cloudflared ~/.cloudflare-warp ~/cloudflare-warp /etc/cloudflared /usr/local/etc/cloudflared]
+2026-04-02T18:36:48.575251649Z stderr F 2026-04-02T18:36:48Z INF Version 2026.3.0 (Checksum 0755ba4cbab59980e6148367fcf53a8f3ec85a97deefd63c2420cf7850769bee)
+2026-04-02T18:36:48.575254009Z stderr F 2026-04-02T18:36:48Z INF GOOS: linux, GOVersion: go1.24.13, GoArch: arm64
+2026-04-02T18:36:48.575256009Z stderr F 2026-04-02T18:36:48Z INF Settings: map[ha-connections:1 metrics:127.0.0.1:45789 no-autoupdate:true protocol:quic url:http://localhost:18790]
+2026-04-02T18:36:48.578386239Z stderr F 2026-04-02T18:36:48Z INF Generated Connector ID: 4903e2d8-d569-4af9-a6d2-3db4f71b324d
+2026-04-02T18:36:48.622203298Z stderr F 2026-04-02T18:36:48Z INF Initial protocol quic
+2026-04-02T18:36:48.622228419Z stderr F 2026-04-02T18:36:48Z INF ICMP proxy will use 10.0.0.18 as source for IPv4
+2026-04-02T18:36:48.622230899Z stderr F 2026-04-02T18:36:48Z INF ICMP proxy will use fe80::17ff:fe04:be81 in zone enp0s3 as source for IPv6
+2026-04-02T18:36:48.630436937Z stderr F 2026-04-02T18:36:48Z INF ICMP proxy will use 10.0.0.18 as source for IPv4
+2026-04-02T18:36:48.632975281Z stderr F 2026-04-02T18:36:48Z INF ICMP proxy will use fe80::17ff:fe04:be81 in zone enp0s3 as source for IPv6
+2026-04-02T18:36:48.634031732Z stderr F 2026-04-02T18:36:48Z INF Starting metrics server on 127.0.0.1:45789/metrics
+2026-04-02T18:36:48.63496742Z stderr F 2026-04-02T18:36:48Z INF Tunnel connection curve preferences: [X25519MLKEM768 CurveP256] connIndex=0 event=0 ip=198.41.200.63
+2026-04-02T18:36:48.637091481Z stderr F 2026/04/02 18:36:48 failed to sufficiently increase receive buffer size (was: 208 kiB, wanted: 7168 kiB, got: 416 kiB). See https://github.com/quic-go/quic-go/wiki/UDP-Buffer-Sizes for details.
+2026-04-02T18:36:48.896496442Z stderr F 2026-04-02T18:36:48Z INF Registered tunnel connection connIndex=0 connection=820951b5-9fba-4c98-bd7a-37e414c7b984 event=0 ip=198.41.200.63 location=lax01 protocol=quic
+2026-04-02T18:36:49.907026667Z stdout F 2026-04-02 18:36:49,899 INFO success: tunnel entered RUNNING state, process has stayed up for > than 5 seconds (startsecs)
+2026-04-02T18:36:49.907054388Z stdout F 2026-04-02 18:36:49,899 INFO success: relay entered RUNNING state, process has stayed up for > than 5 seconds (startsecs)
+2026-04-02T18:36:49.907057028Z stdout F 2026-04-02 18:36:49,899 INFO success: gateway entered RUNNING state, process has stayed up for > than 5 seconds (startsecs)
+2026-04-02T18:36:51.356997536Z stderr F 2026-04-02T18:36:51.356+00:00 [gateway] auth mode=none explicitly configured; all gateway connections are unauthenticated.
+2026-04-02T18:36:51.424810945Z stderr F 2026-04-02T18:36:51.422+00:00 Config overwrite: /home/clawuser/config/openclaw.json (sha256 a2de26f8493464be2407ee29617e35b36e09b036ed101e919e74cfa6f185ab90 -> ede85ecdea3961cd1a5494dc37da9eef8e0b65e934e56778992d4074280e75cc, backup=/home/clawuser/config/openclaw.json.bak)
+2026-04-02T18:36:51.451042795Z stdout F 2026-04-02T18:36:51.450+00:00 [gateway] auto-enabled plugins:
+2026-04-02T18:36:51.451060796Z stdout F - browser configured, enabled automatically.

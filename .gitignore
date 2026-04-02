@@ -5,4 +5,5 @@ credentials/*
 
 .env
 models.json
-deploy-oracle.sh
+
+*tmp.*

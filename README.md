@@ -35,8 +35,34 @@ Add a fallback model for when Z.ai credits run out. Recommended: [Qwen 35 Claude
 ```bash
 cp models.example.json models.json    # add your API keys and model config
 cp .env.example .env                  # fill in channel/tool credentials
-sh rebuild.sh                         # build and run
+sh rebuild.sh                         # build and run (x86)
 ```
+
+## Deploy to Oracle Cloud (Always Free)
+
+Build the ARM image and push to Oracle Container Registry using the OCI CLI:
+
+```bash
+# One-time setup
+pip install oci-cli
+oci setup config
+# Generate an auth token: OCI Console → User Settings → Auth Tokens
+echo "OCI_AUTH_TOKEN=your-auth-token" >> .env
+
+# Enable ARM cross-compilation (one-time, if building on x86)
+docker run --rm --privileged multiarch/qemu-user-static --reset -p yes
+
+# Build, push, and deploy
+bash scripts/deploy-oracle.sh
+```
+
+The deploy script auto-detects region, namespace, compartment, username, AD, and subnet from your OCI CLI config. The only manual value is the auth token in `.env`.
+
+**What it does:**
+1. Builds `Dockerfile.ARM` for `linux/arm64`
+2. Tags and pushes to `<region>.ocir.io`
+3. Creates a Container Instance (`CI.Standard.A1.Flex`, 1 OCPU, 6 GB RAM — free tier)
+4. Streams container logs to your terminal
 
 ## Architecture
 
