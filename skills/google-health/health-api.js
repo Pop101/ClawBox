@@ -135,9 +135,8 @@ Types: steps sleep exercise weight bodyFat nutritionLog hydrationLog
     let data;
     try { data = JSON.parse(raw); } catch { console.error("ERROR: invalid JSON"); process.exit(1); }
     const now = new Date().toISOString();
-    const payload = { data, startTime: data.startTime || now, endTime: data.endTime || now };
-    delete payload.data.startTime;
-    delete payload.data.endTime;
+    const { startTime, endTime, ...rest } = data;
+    const payload = { data: rest, startTime: startTime || now, endTime: endTime || now };
     return api("POST", `/users/me/dataTypes/${dt}/dataPoints`, payload);
   }
 

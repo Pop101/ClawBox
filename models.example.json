@@ -1,5 +1,6 @@
 {
   "order": ["claude", "remote", "local", "gemini"],
+  "heartbeatModel": "claude",
 
   "providers": {
     "claude": {
@@ -7,12 +8,11 @@
       "provider": "anthropic",
       "api": "anthropic-messages",
       "baseUrl": "https://api.anthropic.com",
-      "apiKeyEnv": "ANTHROPIC_API_KEY",
-      "modelEnv": "CLAUDE_MODEL_NAME",
+      "apiKey": "sk-ant-api03-YOUR-KEY-HERE",
+      "model": "claude-haiku-4-5",
       "contextWindow": 200000,
       "input": ["text", "image"],
       "cost": { "input": 1, "output": 5, "cacheRead": 0.1, "cacheWrite": 1.25 },
-      "cache": true,
       "extras": {
         "upgradeModel": "claude-sonnet-4-6",
         "upgradeAlias": "sonnet",
@@ -24,20 +24,20 @@
       "alias": "remote",
       "provider": "remote",
       "api": "openai-completions",
-      "baseUrlEnv": "REMOTE_BASE_URL",
-      "apiKeyEnv": "REMOTE_API_KEY",
-      "modelEnv": "REMOTE_MODEL_NAME",
-      "contextWindowEnv": "REMOTE_CONTEXT_WINDOW",
+      "baseUrl": "https://openrouter.ai/api/v1",
+      "apiKey": "sk-or-v1-YOUR-KEY-HERE",
+      "model": "minimax/minimax-m2.7",
+      "contextWindow": 204800,
       "cost": { "input": 0.45, "output": 2.2, "cacheRead": 0, "cacheWrite": 0 }
     },
     "local": {
       "alias": "local",
       "provider": "selfhost",
-      "apiEnv": "SELFHOST_API_TYPE",
-      "baseUrlEnv": "SELFHOST_BASE_URL",
-      "apiKeyEnv": "SELFHOST_API_KEY",
-      "modelEnv": "SELFHOST_MODEL_NAME",
-      "contextWindowEnv": "SELFHOST_CONTEXT_WINDOW",
+      "api": "openai-completions",
+      "baseUrl": "http://127.0.0.1:8080/v1",
+      "apiKey": "your-key",
+      "model": "your-model.gguf",
+      "contextWindow": 128000,
       "input": ["text"],
       "cost": { "input": 0, "output": 0, "cacheRead": 0, "cacheWrite": 0 }
     },
@@ -46,8 +46,8 @@
       "provider": "google",
       "api": "google-generative-ai",
       "baseUrl": "https://generativelanguage.googleapis.com/v1beta",
-      "apiKeyEnv": "GEMINI_API_KEY",
-      "modelEnv": "GEMINI_MODEL_NAME",
+      "apiKey": "YOUR-GEMINI-KEY",
+      "model": "gemini-3.1-flash-preview",
       "contextWindow": 1048576,
       "input": ["text", "image"],
       "cost": { "input": 0.5, "output": 3, "cacheRead": 0.05, "cacheWrite": 0.5 },
@@ -56,16 +56,6 @@
   },
 
   "mcpServers": {
-    "example-remote": {
-      "url": "https://your-mcp-server.example.com/mcp",
-      "auth": "Bearer your-token",
-      "description": "Example remote MCP server (proxied via stdio)"
-    },
-    "example-local": {
-      "command": "npx",
-      "args": ["-y", "@modelcontextprotocol/server-filesystem", "/data"],
-      "description": "Example local stdio MCP server"
-    },
     "notion": {
       "url": "https://mcp.notion.com/mcp",
       "oauthFile": "/home/clawuser/credentials/notion-oauth.json",
@@ -75,7 +65,7 @@
       "command": "claude",
       "args": ["mcp", "serve"],
       "env": { "ANTHROPIC_API_KEY": "{{ANTHROPIC_API_KEY}}" },
-      "description": "Claude Code — read, edit, search files, run shell commands, and perform coding tasks"
+      "description": "Claude Code — coding tasks"
     }
   }
 }

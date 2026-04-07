@@ -35,7 +35,7 @@ Add a fallback model for when Z.ai credits run out. Recommended: [Qwen 35 Claude
 ```bash
 cp models.example.json models.json    # add your API keys and model config
 cp .env.example .env                  # fill in channel/tool credentials
-sh rebuild.sh                         # build and run (x86)
+sh scripts/rebuild.sh                 # build and run
 ```
 
 ## Deploy to Oracle Cloud (Always Free)

@@ -16,6 +16,10 @@ services:
       STEALTH_BROWSER_HEADLESS: ${STEALTH_BROWSER_HEADLESS:-true}
       # Disable mDNS broadcasting on local network
       OPENCLAW_DISABLE_BONJOUR: "1"
+      # Skip device pairing for internal tool calls (Docker has no interactive pairing)
+      OPENCLAW_SKIP_PAIRING: "1"
+      OPENCLAW_TRUST_LOCAL_DEVICES: "1"
+      OPENCLAW_NO_RESPAWN: "1"
     ports:
       - "127.0.0.1:18789:18789"
       - "0.0.0.0:18790:18790"   # SMS webhook receiver (needs to be reachable from SMS Gateway cloud)

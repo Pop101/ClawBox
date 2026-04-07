@@ -64,7 +64,7 @@ RUN npm install -g openclaw@latest clawhub@latest \
 # Extract the Capsolver Chrome extension from the npm package (it bundles it as a ZIP).
 # At runtime, stealth-browser.js patches config.js with the API key and loads it into Chrome.
 RUN mkdir -p /opt/capsolver-extension && \
-    CAPSOLVER_ZIP=$(find /usr/lib/node_modules/puppeteer-extra-plugin-capsolver -name "*.zip" 2>/dev/null | head -1) && \
+    CAPSOLVER_ZIP=$(find /usr/lib/node_modules/puppeteer-extra-plugin-capsolver /usr/local/lib/node_modules/puppeteer-extra-plugin-capsolver -name "*.zip" 2>/dev/null | head -1) && \
     if [ -n "$CAPSOLVER_ZIP" ]; then \
       unzip -q "$CAPSOLVER_ZIP" -d /opt/capsolver-extension && \
       echo "Capsolver extension extracted from $CAPSOLVER_ZIP"; \

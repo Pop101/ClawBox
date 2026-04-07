@@ -50,7 +50,7 @@ function setupCapsolverExtension() {
   }
 
   const srcDir = "/opt/capsolver-extension";
-  if (!fs.existsSync(path.join(srcDir, "manifest.json")) && !fs.existsSync(path.join(srcDir, "assets"))) {
+  if (!fs.existsSync(path.join(srcDir, "manifest.json"))) {
     console.warn("[stealth-browser] Capsolver extension not found at " + srcDir);
     return null;
   }

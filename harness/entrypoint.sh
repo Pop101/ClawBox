@@ -35,10 +35,10 @@ QH_END="${QUIET_HOURS_END:-7}"
 PROMPTS_SRC="/home/clawuser/openclaw/prompts"
 for mdfile in SOUL.md AGENTS.md USER.md HEARTBEAT.md; do
   if [ -f "$PROMPTS_SRC/$mdfile" ] && [ ! -f "$WORKSPACE/$mdfile" ]; then
-    sed -e "s/{{OWNER_NAME}}/$OWNER/g" \
-        -e "s/{{OWNER_EMAIL}}/$OWNER_MAIL/g" \
-        -e "s/{{QUIET_HOURS_START}}/$QH_START/g" \
-        -e "s/{{QUIET_HOURS_END}}/$QH_END/g" \
+    sed -e "s|{{OWNER_NAME}}|$OWNER|g" \
+        -e "s|{{OWNER_EMAIL}}|$OWNER_MAIL|g" \
+        -e "s|{{QUIET_HOURS_START}}|$QH_START|g" \
+        -e "s|{{QUIET_HOURS_END}}|$QH_END|g" \
       "$PROMPTS_SRC/$mdfile" > "$WORKSPACE/$mdfile"
     echo "[entrypoint] Seeded $mdfile"
   fi
@@ -71,9 +71,13 @@ CREDS_DIR="/home/clawuser/credentials"
 GOG_OK=true
 
 if [ -z "${GOG_KEYRING_PASSWORD:-}" ]; then
+  echo "[entrypoint] WARNING: GOG_KEYRING_PASSWORD not set — skipping Google Workspace"
   GOG_OK=false
 else
-  gog auth keyring file 2>&1 || GOG_OK=false
+  if ! gog auth keyring file 2>&1; then
+    echo "[entrypoint] WARNING: gog keyring init failed — skipping Google Workspace"
+    GOG_OK=false
+  fi
 fi
 
 if [ "$GOG_OK" = true ] && [ -f "$CREDS_DIR/credentials.json" ]; then
@@ -122,6 +126,66 @@ cat > "$HOME/.openclaw/exec-approvals.json" <<APPROVALS
   }
 }
 APPROVALS
+
+# ── Pre-seed device pairing to avoid "pairing required" in Docker ────────────
+# The gateway's device pairing system blocks CLI/internal connections because
+# Docker containers have no interactive pairing flow. Pre-seeding identity +
+# paired devices with a synthetic device entry lets the gateway accept local
+# connections without requiring a manual pairing approval step.
+# See: https://github.com/openclaw/openclaw/issues/55067
+IDENTITY_DIR="$HOME/.openclaw/identity"
+PAIRING_DIR="$HOME/.openclaw/pairing/devices"
+mkdir -p "$IDENTITY_DIR" "$PAIRING_DIR"
+
+if [ ! -f "$IDENTITY_DIR/device.json" ]; then
+  echo "[entrypoint] Generating device identity for Docker container..."
+  # Generate a random keypair — stable across restarts because the file persists on the volume
+  node -e "
+    const crypto = require('crypto');
+    const { publicKey, privateKey } = crypto.generateKeyPairSync('ed25519');
+    const pubDer = publicKey.export({ type: 'spki', format: 'der' });
+    const pubB64 = pubDer.toString('base64url');
+    const privDer = privateKey.export({ type: 'pkcs8', format: 'der' });
+    const privB64 = privDer.toString('base64url');
+    const deviceId = crypto.createHash('sha256').update(pubDer).digest('hex');
+    const identity = {
+      deviceId,
+      publicKey: pubB64,
+      privateKey: privB64,
+      createdAt: new Date().toISOString()
+    };
+    require('fs').writeFileSync('$IDENTITY_DIR/device.json', JSON.stringify(identity, null, 2));
+    console.log('[entrypoint] Device identity created: ' + deviceId.slice(0, 12) + '...');
+  "
+fi
+
+# Pre-approve the container's own device — ALWAYS overwrite (volume may have stale data)
+if [ -f "$IDENTITY_DIR/device.json" ]; then
+  DEVICE_ID=$(node -e "console.log(JSON.parse(require('fs').readFileSync('$IDENTITY_DIR/device.json','utf8')).deviceId)")
+  PUB_KEY=$(node -e "console.log(JSON.parse(require('fs').readFileSync('$IDENTITY_DIR/device.json','utf8')).publicKey)")
+  NOW_MS=$(node -e "console.log(Date.now())")
+
+  echo "[entrypoint] Pre-approving device $DEVICE_ID for local pairing..."
+  cat > "$PAIRING_DIR/paired.json" <<PAIRED
+{
+  "$DEVICE_ID": {
+    "deviceId": "$DEVICE_ID",
+    "publicKey": "$PUB_KEY",
+    "displayName": "docker-container",
+    "platform": "linux",
+    "deviceFamily": "server",
+    "role": "operator",
+    "roles": ["operator"],
+    "scopes": ["operator.admin", "operator.write", "operator.read", "operator.pairing"],
+    "approvedScopes": ["operator.admin", "operator.write", "operator.read", "operator.pairing"],
+    "approvedAtMs": $NOW_MS,
+    "clientId": "docker-self",
+    "clientMode": "backend"
+  }
+}
+PAIRED
+  echo "[entrypoint] Device pre-approved with operator.admin scopes"
+fi
 
 # ── Hand off to supervisord ──────────────────────────────────────────────────
 echo "[entrypoint] Starting services via supervisord..."

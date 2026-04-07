@@ -43,8 +43,8 @@ let visionModelRef = null;
 for (const [key, cfg] of Object.entries(modelsJson.providers)) {
   const { apiKey, model, baseUrl, api, contextWindow: ctxWindow } = cfg;
 
-  if (!model || !api) continue;
-  if (!apiKey) continue;
+  if (!model || !api) { console.warn(`  SKIP ${key}: missing model or api`); continue; }
+  if (!apiKey) { console.warn(`  SKIP ${key}: missing apiKey`); continue; }
 
   const providerName = cfg.provider;
   // If global cap is set, cap this model. Otherwise use its own window.
@@ -108,6 +108,9 @@ const fallbacks = ordered.slice(1);
 // Heartbeat model: explicit from models.json, or last in chain (cheapest)
 const heartbeatKey = modelsJson.heartbeatModel;
 const heartbeatModel = (heartbeatKey && modelRefsByKey[heartbeatKey]) || ordered.at(-1);
+if (heartbeatKey && !modelRefsByKey[heartbeatKey]) {
+  console.warn(`  WARNING: heartbeatModel "${heartbeatKey}" not available, using ${heartbeatModel}`);
+}
 
 // Effective context for pruning = global cap or smallest model window
 const allWindows = Object.values(providers).flatMap(p => p.models.map(m => m.contextWindow));
@@ -203,67 +206,7 @@ function buildChannels() {
   return Object.keys(ch).length > 0 ? { channels: ch } : {};
 }
 
-// ── Template resolver ────────────────────────────────────────────────────────
-// Replace {{VAR}} with the value from process.env, or from provider apiKeys in
-// models.json. Works on any string value anywhere in the MCP config.
-
-function resolveTemplate(str) {
-  if (typeof str !== "string") return str;
-  return str.replaceAll(/\{\{(\w+)\}\}/g, (_, varName) => {
-    // Check process.env first
-    const fromEnv = env(varName);
-    if (fromEnv) return fromEnv;
-    // Check provider apiKeys (e.g., {{ANTHROPIC_API_KEY}} finds the anthropic provider's key)
-    for (const p of Object.values(modelsJson.providers)) {
-      if (p.apiKey && varName.toLowerCase().includes(p.provider)) return p.apiKey;
-    }
-    return "";
-  });
-}
-
-function resolveObj(obj) {
-  if (typeof obj === "string") return resolveTemplate(obj);
-  if (Array.isArray(obj)) return obj.map(resolveObj);
-  if (obj && typeof obj === "object") {
-    return Object.fromEntries(Object.entries(obj).map(([k, v]) => [k, resolveObj(v)]));
-  }
-  return obj;
-}
-
-// ── MCP servers ──────────────────────────────────────────────────────────────
-// OpenClaw only supports stdio MCP servers. For remote HTTP endpoints, we spawn
-// a local proxy (mcp-http-proxy.js) that bridges stdio <-> HTTP.
-
-const proxyScript = path.join(SCRIPT_DIR, "mcp-http-proxy.js");
-const mcpServers = {};
-
-if (modelsJson.mcpServers) {
-  for (const [name, cfg] of Object.entries(modelsJson.mcpServers)) {
-    if (cfg.command) {
-      // Native stdio server — resolve {{VAR}} templates in env and args
-      mcpServers[name] = {
-        command: cfg.command,
-        args: resolveObj(cfg.args || []),
-        ...(cfg.env ? { env: resolveObj(cfg.env) } : {}),
-      };
-    } else if (cfg.url) {
-      // Remote HTTP server — proxy via stdio bridge, resolve templates in url/auth
-      const resolvedUrl = resolveTemplate(cfg.url);
-      const resolvedAuth = cfg.auth ? resolveTemplate(cfg.auth) : undefined;
-      const args = [proxyScript, resolvedUrl];
-      if (resolvedAuth) args.push(resolvedAuth);
-      else args.push(""); // placeholder so oauthFile is arg[4]
-      if (cfg.oauthFile) args.push(cfg.oauthFile);
-      mcpServers[name] = {
-        command: "node",
-        args,
-      };
-    }
-    if (mcpServers[name]) {
-      console.log(`  MCP: ${name}${cfg.url ? " (proxied from " + cfg.url + ")" : ""}`);
-    }
-  }
-}
+// MCP servers are configured via `openclaw mcp set` in setup-mcp.js (runs after gateway starts).
 
 // ── Assemble config ──────────────────────────────────────────────────────────
 
@@ -271,9 +214,22 @@ const config = {
   gateway: {
     mode: "local",
     auth: { mode: "none" },
+    controlUi: {
+      dangerouslyDisableDeviceAuth: true,
+      allowInsecureAuth: true,
+    },
+  },
+  tools: {
+    exec: {
+      security: "full",
+      ask: "off",
+    },
+    elevated: {
+      enabled: true,
+      allowFrom: { "*": ["*"] },
+    },
   },
   browser,
-  ...(Object.keys(mcpServers).length > 0 ? { mcp: { servers: mcpServers } } : {}),
   skills: {
     load: { watch: true, watchDebounceMs: 250, extraDirs: [`${WORKSPACE}/skills`] },
     entries: skillEntries,

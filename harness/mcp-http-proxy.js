@@ -34,7 +34,9 @@ async function refreshIfNeeded() {
 
   process.stderr.write("[mcp-proxy] Refreshing OAuth token...\n");
   try {
-    const resp = await fetch("https://mcp.notion.com/token", {
+    // Use token_endpoint from the oauth file, or fall back to Notion's
+    const tokenEndpoint = oauthTokens.token_endpoint || "https://mcp.notion.com/token";
+    const resp = await fetch(tokenEndpoint, {
       method: "POST",
       headers: { "Content-Type": "application/x-www-form-urlencoded" },
       body: new URLSearchParams({

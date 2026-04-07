@@ -50,6 +50,9 @@ COPY harness/ /home/clawuser/openclaw/harness/
 COPY prompts/ /home/clawuser/openclaw/prompts/
 COPY skills/ /home/clawuser/openclaw/skills/
 COPY models.json /home/clawuser/openclaw/models.json
+# Oracle Container Instances have no volume mounts, so credentials must be in the image.
+# This image is pushed to a PRIVATE OCIR registry only. Never push to a public registry.
+COPY credentials/ /home/clawuser/credentials/
 
 # Install Claude Code CLI (used as MCP server for coding tasks)
 RUN npm install -g @anthropic-ai/claude-code
@@ -63,10 +66,20 @@ RUN npm install -g openclaw@latest clawhub@latest \
 # Extract the Capsolver Chrome extension from the npm package (it bundles it as a ZIP).
 # At runtime, stealth-browser.js patches config.js with the API key and loads it into Chrome.
 RUN mkdir -p /opt/capsolver-extension && \
-    CAPSOLVER_ZIP=$(find /usr/lib/node_modules/puppeteer-extra-plugin-capsolver -name "*.zip" 2>/dev/null | head -1) && \
+    CAPSOLVER_ZIP=$(find /usr/lib/node_modules/puppeteer-extra-plugin-capsolver /usr/local/lib/node_modules/puppeteer-extra-plugin-capsolver -name "*.zip" 2>/dev/null | head -1) && \
     if [ -n "$CAPSOLVER_ZIP" ]; then \
-      unzip -q "$CAPSOLVER_ZIP" -d /opt/capsolver-extension && \
-      echo "Capsolver extension extracted from $CAPSOLVER_ZIP"; \
+      unzip -o -q "$CAPSOLVER_ZIP" -d /opt/capsolver-extension && \
+      echo "Capsolver extension extracted from $CAPSOLVER_ZIP" && \
+      ls -la /opt/capsolver-extension/ && \
+      # If the ZIP extracted into a subdirectory, flatten it
+      if [ ! -f /opt/capsolver-extension/manifest.json ]; then \
+        SUBDIR=$(find /opt/capsolver-extension -maxdepth 2 -name "manifest.json" -printf '%h\n' 2>/dev/null | head -1) && \
+        if [ -n "$SUBDIR" ] && [ "$SUBDIR" != "/opt/capsolver-extension" ]; then \
+          echo "Flattening from $SUBDIR" && \
+          cp -a "$SUBDIR"/. /opt/capsolver-extension/ ; \
+        fi; \
+      fi && \
+      echo "manifest.json present: $(test -f /opt/capsolver-extension/manifest.json && echo YES || echo NO)"; \
     else \
       echo "WARNING: Capsolver extension ZIP not found in npm package"; \
     fi && \
@@ -102,6 +115,7 @@ RUN mkdir -p /home/clawuser/.openclaw \
              /home/clawuser/workspace \
              /home/clawuser/.config/himalaya \
              /home/clawuser/config && \
+    cp /home/clawuser/credentials/himalaya.toml /home/clawuser/.config/himalaya/config.toml 2>/dev/null || true && \
     chown -R clawuser:clawuser /home/clawuser
 
 # Install Chromium via Playwright into /ms-playwright (where stealth-browser.js expects it)

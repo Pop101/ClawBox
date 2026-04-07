@@ -82,7 +82,7 @@ echo ""
 # ── Step 1: Build ─────────────────────────────────────────────────────────────
 
 echo "[1/4] Building Docker image (linux/arm64)..."
-docker buildx build --platform linux/arm64 -f Dockerfile.ARM -t "${REPO_NAME}:${IMAGE_TAG}" --load .
+docker buildx build --no-cache --platform linux/arm64 -f Dockerfile.ARM -t "${REPO_NAME}:${IMAGE_TAG}" --load .
 
 # ── Step 2: Tag ───────────────────────────────────────────────────────────────
 
@@ -101,12 +101,13 @@ echo "  Pushed: ${FULL_IMAGE}"
 if [ -n "$OCI_COMPARTMENT" ] && [ -n "$OCI_SUBNET" ] && [ "$OCI_SUBNET" != "null" ] && [ -n "$OCI_AD" ]; then
   echo "[4/4] Creating Container Instance on Oracle Cloud..."
 
-  # Load .env vars into a JSON object for container environment
+  # Load .env vars + docker-compose environment vars into a JSON object
   ENV_JSON="{}"
   if [ -f .env ]; then
     ENV_JSON=$(python -c "
-import json, re, os
+import json, re
 pairs = {}
+# Read from .env
 with open('.env') as f:
     for line in f:
         line = line.strip()
@@ -115,16 +116,24 @@ with open('.env') as f:
         m = re.match(r'^([A-Za-z_][A-Za-z0-9_]*)=(.*)', line)
         if m:
             key, val = m.group(1), m.group(2)
-            # Strip optional surrounding quotes
             if len(val) >= 2 and val[0] == val[-1] and val[0] in ('\"', \"'\"):
                 val = val[1:-1]
-            # Skip OCI-only vars that shouldn't go into the container
             if key.startswith('OCI_'):
                 continue
             pairs[key] = val
+# Add docker-compose environment vars that aren't in .env
+# These are critical for the container runtime
+pairs.setdefault('OPENCLAW_BROWSER_CDP_URL', 'http://127.0.0.1:9223')
+pairs.setdefault('STEALTH_BROWSER_PORT', '9223')
+pairs.setdefault('STEALTH_BROWSER_HOST', '127.0.0.1')
+pairs.setdefault('STEALTH_BROWSER_HEADLESS', 'true')
+pairs.setdefault('OPENCLAW_DISABLE_BONJOUR', '1')
+pairs.setdefault('OPENCLAW_SKIP_PAIRING', '1')
+pairs.setdefault('OPENCLAW_TRUST_LOCAL_DEVICES', '1')
+pairs.setdefault('OPENCLAW_NO_RESPAWN', '1')
 print(json.dumps(pairs))
 " 2>/dev/null || echo "{}")
-    echo "  Loaded $(echo "$ENV_JSON" | python -c 'import sys,json;print(len(json.load(sys.stdin)))' 2>/dev/null || echo '?') env vars from .env"
+    echo "  Loaded $(echo "$ENV_JSON" | python -c 'import sys,json;print(len(json.load(sys.stdin)))' 2>/dev/null || echo '?') env vars from .env + defaults"
   fi
 
   # Check if instance already exists (any state)
@@ -243,16 +252,19 @@ if [ -n "$OCI_COMPARTMENT" ]; then
     if [ -n "$CONTAINER_ID" ] && [ "$CONTAINER_ID" != "None" ] && [ "$CONTAINER_ID" != "null" ]; then
       echo "  Tailing logs for container: ${CONTAINER_ID}"
       echo "  -----------------------------------------"
-      # Poll logs in a loop since OCI CLI doesn't support follow mode
-      PREV_LEN=0
+      LOG_TMP=".oci-logs-tmp.log"
+      trap "rm -f '$LOG_TMP' '$CONTAINERS_FILE' '$SECRETS_FILE'" EXIT
+      PREV_LINES=0
       while true; do
-        LOGS=$(oci container-instances container retrieve-logs --config-file "$OCI_CONFIG" \
+        oci container-instances container retrieve-logs --config-file "$OCI_CONFIG" \
           --container-id "${CONTAINER_ID}" \
-          --raw-output 2>/dev/null || echo "")
-        CUR_LEN=${#LOGS}
-        if [ "$CUR_LEN" -gt "$PREV_LEN" ] && [ -n "$LOGS" ]; then
-          echo "$LOGS" | tail -c +$((PREV_LEN + 1))
-          PREV_LEN=$CUR_LEN
+          --file "$LOG_TMP" 2>/dev/null || true
+        if [ -f "$LOG_TMP" ]; then
+          CUR_LINES=$(wc -l < "$LOG_TMP")
+          if [ "$CUR_LINES" -gt "$PREV_LINES" ]; then
+            tail -n +$((PREV_LINES + 1)) "$LOG_TMP"
+            PREV_LINES=$CUR_LINES
+          fi
         fi
         sleep 5
       done
