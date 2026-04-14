@@ -138,6 +138,7 @@ const effectiveContextTokens = globalContextCap || Math.min(...allWindows);
 // Capsolver extension is loaded by stealth-browser.js at Chrome launch time.
 
 const cdpUrl = env("OPENCLAW_BROWSER_CDP_URL");
+const mcpConfig = buildMcpServers();
 const browser = {
   enabled: Boolean(cdpUrl),
   defaultProfile: "stealth",
@@ -223,7 +224,43 @@ function buildChannels() {
   return Object.keys(ch).length > 0 ? { channels: ch } : {};
 }
 
-// MCP servers are configured via `openclaw mcp set` in setup-mcp.js during boot.
+function resolveObj(obj) {
+  if (typeof obj === "string") return resolveTemplate(obj);
+  if (Array.isArray(obj)) return obj.map(resolveObj);
+  if (obj && typeof obj === "object") {
+    return Object.fromEntries(Object.entries(obj).map(([k, v]) => [k, resolveObj(v)]));
+  }
+  return obj;
+}
+
+function buildMcpServers() {
+  const servers = {};
+  const proxyScript = path.join(SCRIPT_DIR, "mcp-http-proxy.js");
+
+  for (const [name, cfg] of Object.entries(modelsJson.mcpServers || {})) {
+    let serverConfig = null;
+
+    if (cfg.command) {
+      serverConfig = {
+        command: cfg.command,
+        args: resolveObj(cfg.args || []),
+        ...(cfg.env ? { env: resolveObj(cfg.env) } : {}),
+      };
+    } else if (cfg.url) {
+      const resolvedUrl = resolveTemplate(cfg.url);
+      const resolvedAuth = cfg.auth ? resolveTemplate(cfg.auth) : "";
+      const args = [proxyScript, resolvedUrl, resolvedAuth];
+      if (cfg.oauthFile) args.push(cfg.oauthFile);
+      serverConfig = { command: "node", args };
+    }
+
+    if (!serverConfig) continue;
+    if (cfg.description) serverConfig.description = cfg.description;
+    servers[name] = serverConfig;
+  }
+
+  return Object.keys(servers).length > 0 ? { mcp: { servers } } : {};
+}
 
 // ── Assemble config ──────────────────────────────────────────────────────────
 
@@ -249,6 +286,7 @@ const config = {
     },
   },
   browser,
+  ...mcpConfig,
   skills: {
     load: { watch: true, watchDebounceMs: 250, extraDirs: [`${WORKSPACE}/skills`] },
     entries: skillEntries,
@@ -291,4 +329,5 @@ console.log(`  Context:   ${effectiveContextTokens.toLocaleString()} tokens${glo
 console.log(`  Auth:      ${config.gateway.auth.mode}${config.gateway.auth.mode === "token" ? " (operator scopes enabled)" : " (WARNING: no operator scopes)"}`);
 console.log(`  Cache:     ${Object.entries(providers).filter(([, p]) => p.params?.cacheControlTtl).map(([k]) => k).join(", ") || "none"} (ttl=1h)`);
 console.log(`  Browser:   ${cdpUrl ? "stealth only" : "disabled (OPENCLAW_BROWSER_CDP_URL missing)"}`);
+console.log(`  MCP:       ${Object.keys(mcpConfig.mcp?.servers || {}).join(", ") || "none"}`);
 console.log(`  Providers: ${Object.keys(providers).join(", ")}`);

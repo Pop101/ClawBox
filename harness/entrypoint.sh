@@ -74,12 +74,6 @@ mkdir -p "$IDENTITY_DIR" "$PAIRING_DIR" "$SESSIONS_DIR"
 echo "[entrypoint] Generating openclaw.json..."
 node "$HOME/openclaw/harness/generate-config.js"
 
-# ── MCP config ───────────────────────────────────────────────────────────────
-# Register MCP servers before the gateway starts so we don't need an in-place
-# gateway restart that invalidates browser state mid-session.
-echo "[entrypoint] Registering MCP servers..."
-node "$HOME/openclaw/harness/setup-mcp.js" 2>&1 || true
-
 # ── Doctor (read-only — do NOT use --fix, it overwrites our config) ─────────
 echo "[entrypoint] Running openclaw doctor..."
 openclaw doctor 2>&1 || true
