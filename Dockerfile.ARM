@@ -58,7 +58,8 @@ COPY credentials/ /home/clawuser/credentials/
 RUN npm install -g @anthropic-ai/claude-code
 
 # Install OpenClaw + clawhub CLI + stealth browser dependencies + captcha solving
-RUN npm install -g openclaw@latest clawhub@latest \
+# grammy is required by openclaw's Telegram channel handler but not bundled as a dependency
+RUN npm install -g openclaw@latest clawhub@latest grammy \
     puppeteer-extra puppeteer-core \
     puppeteer-extra-plugin-stealth puppeteer-extra-plugin-user-preferences \
     puppeteer-extra-plugin-user-data-dir puppeteer-extra-plugin-capsolver

@@ -24,10 +24,22 @@ function envInt(name) {
   return Number.isFinite(n) && n > 0 ? n : undefined;
 }
 
+function resolveTemplate(str) {
+  if (typeof str !== "string") return str;
+  return str.replace(/\{\{(\w+)\}\}/g, (_, name) => env(name) || "");
+}
+
 // ── Load models.json ─────────────────────────────────────────────────────────
 
 const modelsJsonPath = path.join(SCRIPT_DIR, "..", "models.json");
-const modelsJson = JSON.parse(fs.readFileSync(modelsJsonPath, "utf8"));
+let modelsJson;
+try {
+  modelsJson = JSON.parse(fs.readFileSync(modelsJsonPath, "utf8"));
+} catch (err) {
+  console.error(`ERROR: Failed to parse models.json: ${err.message}`);
+  console.error("  If starting fresh, copy models.example.json → models.json and add your keys.");
+  process.exit(1);
+}
 
 // CONTEXT_TOKENS env var: if set to a valid int, cap ALL models to that.
 // If unset, each model uses its own contextWindow from models.json.
@@ -41,10 +53,16 @@ const modelRefsByKey = {};
 let visionModelRef = null;
 
 for (const [key, cfg] of Object.entries(modelsJson.providers)) {
-  const { apiKey, model, baseUrl, api, contextWindow: ctxWindow } = cfg;
+  const { model, api, contextWindow: ctxWindow } = cfg;
+  const apiKey = resolveTemplate(cfg.apiKey);
+  const baseUrl = resolveTemplate(cfg.baseUrl);
 
   if (!model || !api) { console.warn(`  SKIP ${key}: missing model or api`); continue; }
-  if (!apiKey) { console.warn(`  SKIP ${key}: missing apiKey`); continue; }
+  if (!apiKey) {
+    const hint = cfg.apiKey?.match(/\{\{(\w+)\}\}/)?.[1];
+    console.warn(`  SKIP ${key}: missing apiKey${hint ? ` (set ${hint} in .env)` : ""}`);
+    continue;
+  }
 
   const providerName = cfg.provider;
   // If global cap is set, cap this model. Otherwise use its own window.
@@ -121,14 +139,13 @@ const effectiveContextTokens = globalContextCap || Math.min(...allWindows);
 
 const cdpUrl = env("OPENCLAW_BROWSER_CDP_URL");
 const browser = {
-  enabled: true,
-  defaultProfile: cdpUrl ? "stealth" : "managed",
+  enabled: Boolean(cdpUrl),
+  defaultProfile: "stealth",
   headless: true, noSandbox: true,
   ssrfPolicy: { dangerouslyAllowPrivateNetwork: true },
-  profiles: {
-    managed: { cdpPort: 18800, color: "#0066CC" },
-    ...(cdpUrl ? { stealth: { cdpUrl, attachOnly: true, color: "#FF4500" } } : {}),
-  },
+  profiles: cdpUrl ? {
+    stealth: { cdpUrl, attachOnly: true, color: "#FF4500" },
+  } : {},
   remoteCdpTimeoutMs: 15000, remoteCdpHandshakeTimeoutMs: 15000,
 };
 
@@ -206,14 +223,16 @@ function buildChannels() {
   return Object.keys(ch).length > 0 ? { channels: ch } : {};
 }
 
-// MCP servers are configured via `openclaw mcp set` in setup-mcp.js (runs after gateway starts).
+// MCP servers are configured via `openclaw mcp set` in setup-mcp.js during boot.
 
 // ── Assemble config ──────────────────────────────────────────────────────────
 
 const config = {
   gateway: {
     mode: "local",
-    auth: { mode: "none" },
+    auth: env("OPENCLAW_GATEWAY_TOKEN")
+      ? { mode: "token", token: env("OPENCLAW_GATEWAY_TOKEN") }
+      : { mode: "none" },
     controlUi: {
       dangerouslyDisableDeviceAuth: true,
       allowInsecureAuth: true,
@@ -269,6 +288,7 @@ console.log(`  Chain:     ${[primary, ...fallbacks].join(" -> ")}`);
 console.log(`  Vision:    ${visionModelRef || "-"}`);
 console.log(`  Heartbeat: ${heartbeatModel}`);
 console.log(`  Context:   ${effectiveContextTokens.toLocaleString()} tokens${globalContextCap ? " (global cap)" : " (per-model min)"}`);
+console.log(`  Auth:      ${config.gateway.auth.mode}${config.gateway.auth.mode === "token" ? " (operator scopes enabled)" : " (WARNING: no operator scopes)"}`);
 console.log(`  Cache:     ${Object.entries(providers).filter(([, p]) => p.params?.cacheControlTtl).map(([k]) => k).join(", ") || "none"} (ttl=1h)`);
-console.log(`  Browser:   ${cdpUrl ? "stealth + managed" : "managed only"}`);
+console.log(`  Browser:   ${cdpUrl ? "stealth only" : "disabled (OPENCLAW_BROWSER_CDP_URL missing)"}`);
 console.log(`  Providers: ${Object.keys(providers).join(", ")}`);

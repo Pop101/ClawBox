@@ -1,14 +1,15 @@
 #!/usr/bin/env node
 // Reads mcpServers from models.json and registers them via `openclaw mcp set`.
-// This is the correct way to persist MCP config — the CLI writes to mcp.servers
-// in openclaw.json through the proper config path that survives gateway rewrites.
+// This runs during container boot before the gateway starts. The CLI writes to
+// mcp.servers in openclaw.json through the proper config path that survives
+// gateway rewrites, so no live gateway restart is needed.
 //
 // For remote HTTP endpoints, wraps them in mcp-http-proxy.js (stdio bridge).
 // Supports {{VAR}} template resolution from provider apiKeys and process.env.
 
 const fs = require("node:fs");
 const path = require("node:path");
-const { execSync } = require("node:child_process");
+const { execFileSync } = require("node:child_process");
 
 const SCRIPT_DIR = __dirname;
 const modelsJsonPath = path.join(SCRIPT_DIR, "..", "models.json");
@@ -38,7 +39,7 @@ function resolveTemplate(str) {
     const fromEnv = env(varName);
     if (fromEnv) return fromEnv;
     for (const p of Object.values(modelsJson.providers || {})) {
-      if (p.apiKey && varName.toLowerCase().includes(p.provider)) return p.apiKey;
+      if (p.apiKey && !p.apiKey.includes("{{") && varName.toLowerCase().includes(p.provider)) return p.apiKey;
     }
     return "";
   });
@@ -53,9 +54,9 @@ function resolveObj(obj) {
   return obj;
 }
 
-function run(cmd) {
+function run(cmd, args) {
   try {
-    return execSync(cmd, { encoding: "utf8", timeout: 15000, stdio: ["pipe", "pipe", "pipe"] }).trim();
+    return execFileSync(cmd, args, { encoding: "utf8", timeout: 120000, stdio: ["pipe", "pipe", "pipe"] }).trim();
   } catch (e) {
     return e.stderr?.trim() || e.message;
   }
@@ -82,10 +83,8 @@ for (const [name, cfg] of Object.entries(modelsJson.mcpServers)) {
 
   if (!serverConfig) continue;
 
-  const json = JSON.stringify(serverConfig);
-  const escaped = json.replace(/'/g, "'\\''");
-  const result = run(`openclaw mcp set "${name}" '${escaped}'`);
+  const result = run("openclaw", ["mcp", "set", name, JSON.stringify(serverConfig)]);
   console.log(`[setup-mcp] ${name}: ${result || "ok"}`);
 }
 
-console.log("[setup-mcp] Done. Gateway restart needed to apply.");
+console.log("[setup-mcp] Done.");

@@ -114,11 +114,13 @@ When {{OWNER_NAME}} says "check my email" — check BOTH himalaya and gog gmail 
 
 ## Workflow: Web Research
 
-1. Start with `tavily-search` (highest quality, AI-optimized results).
-2. Fall back to `ddg-search` if Tavily is unavailable or rate-limited.
-3. Use `jina-reader` to extract clean markdown from specific URLs.
-4. Use the stealth browser profile when JavaScript rendering, login, or form filling is required. If stealth crashes, wait 10-20 seconds (the watchdog auto-restarts it) and retry. Fall back to the managed profile only after two stealth failures.
-5. Use `summarize` skill for long pages, PDFs, or YouTube videos.
+1. **If you know the URL or site**, skip search entirely — open the stealth browser and navigate directly.
+2. If you need to find something, use `tavily-search` (or `ddg-search` as fallback) to identify URLs.
+3. **Always open the best result in the browser.** Search snippets are often stale, truncated, or misleading. Read the actual page.
+4. Navigate deeply — click through to subpages, menus, pricing tabs, contact pages, etc. Don't stop at the homepage.
+5. If the stealth browser crashes, wait 10-20 seconds (the watchdog auto-restarts it) and retry. Fall back to the managed profile only after two stealth failures.
+6. Use `jina-reader` only for simple static pages where you just need raw text (no JavaScript, no interaction needed).
+7. Use `summarize` skill for long pages, PDFs, or YouTube videos.
 
 ## Workflow: Captchas & Anti-Bot
 
@@ -227,13 +229,17 @@ When multiple tools can accomplish the same task, prefer in this order:
 
 | Task | First choice | Fallback |
 |------|-------------|----------|
-| Web search | tavily-search | ddg-search |
-| Read URL | jina-reader | stealth browser |
+| Anything involving a website | **stealth browser** | managed browser → jina-reader |
+| Web search | tavily-search → **open top result in browser** | ddg-search |
+| Read URL / web content | **stealth browser** | jina-reader (static pages only) |
+| Fill forms / log in / interact | **stealth browser** (only option) | — |
 | Email | himalaya ({{OWNER_EMAIL}}) | gog gmail (only if {{OWNER_NAME}} says "Gmail") |
 | Calendar | gog | Reclaim API (smart scheduling) |
 | Tasks | Google Tasks (gog) | Reclaim (needs calendar time) |
 | File ops | built-in Read/Write | filesystem (batch) |
 | Summarize | summarize skill | manual extraction |
+
+**Key principle:** The browser can do everything jina-reader and search can do, plus interact with pages. When in doubt, use the browser. Reserve jina-reader for simple static page extraction where JavaScript rendering is unnecessary.
 
 ## Agent Roles
 

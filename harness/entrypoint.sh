@@ -53,11 +53,34 @@ if [ "${STEALTH_BROWSER_HEADLESS:-true}" = "false" ]; then
   sleep 1
 fi
 
+# ── Gateway auth token ───────────────────────────────────────────────────────
+# Token auth links sessions to the pre-approved device, granting operator scopes
+# (operator.read, operator.write, etc.) that tools like the browser require.
+# Without this, sessions are anonymous and scope checks fail.
+TOKEN_FILE="$HOME/.openclaw/gateway-token"
+if [ ! -f "$TOKEN_FILE" ]; then
+  node -e "require('fs').writeFileSync('$TOKEN_FILE', require('crypto').randomBytes(32).toString('hex'))"
+  echo "[entrypoint] Generated gateway auth token"
+fi
+export OPENCLAW_GATEWAY_TOKEN=$(cat "$TOKEN_FILE")
+
+# ── Bootstrap local state needed before config validation ────────────────────
+IDENTITY_DIR="$HOME/.openclaw/identity"
+PAIRING_DIR="$HOME/.openclaw/pairing/devices"
+SESSIONS_DIR="$HOME/.openclaw/agents/main/sessions"
+mkdir -p "$IDENTITY_DIR" "$PAIRING_DIR" "$SESSIONS_DIR"
+
 # ── Generate config ──────────────────────────────────────────────────────────
 echo "[entrypoint] Generating openclaw.json..."
 node "$HOME/openclaw/harness/generate-config.js"
 
-# ── Doctor (read-only — do NOT use --fix, it overwrites our config) ───────────
+# ── MCP config ───────────────────────────────────────────────────────────────
+# Register MCP servers before the gateway starts so we don't need an in-place
+# gateway restart that invalidates browser state mid-session.
+echo "[entrypoint] Registering MCP servers..."
+node "$HOME/openclaw/harness/setup-mcp.js" 2>&1 || true
+
+# ── Doctor (read-only — do NOT use --fix, it overwrites our config) ─────────
 echo "[entrypoint] Running openclaw doctor..."
 openclaw doctor 2>&1 || true
 
@@ -133,10 +156,6 @@ APPROVALS
 # paired devices with a synthetic device entry lets the gateway accept local
 # connections without requiring a manual pairing approval step.
 # See: https://github.com/openclaw/openclaw/issues/55067
-IDENTITY_DIR="$HOME/.openclaw/identity"
-PAIRING_DIR="$HOME/.openclaw/pairing/devices"
-mkdir -p "$IDENTITY_DIR" "$PAIRING_DIR"
-
 if [ ! -f "$IDENTITY_DIR/device.json" ]; then
   echo "[entrypoint] Generating device identity for Docker container..."
   # Generate a random keypair — stable across restarts because the file persists on the volume

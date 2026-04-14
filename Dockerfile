@@ -5,7 +5,7 @@ FROM mcr.microsoft.com/playwright:v1.58.2
 
 RUN apt-get update && apt-get install -y --no-install-recommends \
     xvfb xauth dbus-x11 fonts-noto-color-emoji fonts-liberation unzip \
-    openjdk-17-jre-headless wget supervisor \
+    openjdk-17-jre-headless wget curl supervisor \
     && rm -rf /var/lib/apt/lists/* \
     && mkdir -p /tmp/.X11-unix && chmod 1777 /tmp/.X11-unix
 
@@ -56,7 +56,8 @@ COPY models.json /home/clawuser/openclaw/models.json
 RUN npm install -g @anthropic-ai/claude-code
 
 # Install OpenClaw + clawhub CLI + stealth browser dependencies + captcha solving
-RUN npm install -g openclaw@latest clawhub@latest \
+# grammy is required by openclaw's Telegram channel handler but not bundled as a dependency
+RUN npm install -g openclaw@latest clawhub@latest grammy \
     puppeteer-extra puppeteer-core \
     puppeteer-extra-plugin-stealth puppeteer-extra-plugin-user-preferences \
     puppeteer-extra-plugin-user-data-dir puppeteer-extra-plugin-capsolver

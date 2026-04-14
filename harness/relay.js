@@ -11,7 +11,7 @@
 const http = require("node:http");
 const fs = require("node:fs");
 const path = require("node:path");
-const { execSync } = require("node:child_process");
+const { execSync, execFileSync } = require("node:child_process");
 
 const SMS_URL = process.env.SMS_GATEWAY_URL;
 const SMS_USER = process.env.SMS_GATEWAY_USERNAME;
@@ -49,10 +49,16 @@ function smsApi(method, apiPath, body) {
 
 function sendToAgent(text) {
   if (!text.trim()) return;
-  const escaped = text.trim().replaceAll("'", String.raw`'\''`);
-  const result = run(`openclaw agent --channel last --deliver --message '${escaped}' 2>&1`);
-  if (result.includes("Error") || result.includes("error")) {
-    console.error("[relay] Send failed:", result.slice(0, 200));
+  try {
+    const result = execFileSync("openclaw",
+      ["agent", "--channel", "last", "--deliver", "--message", text.trim()],
+      { encoding: "utf8", timeout: 30000, stdio: ["pipe", "pipe", "pipe"] }
+    ).trim();
+    if (result.includes("Error") || result.includes("error")) {
+      console.error("[relay] Send failed:", result.slice(0, 200));
+    }
+  } catch (e) {
+    console.error("[relay] Send failed:", (e.stderr || e.message || "").slice(0, 200));
   }
 }
 

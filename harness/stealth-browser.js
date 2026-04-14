@@ -200,10 +200,11 @@ async function main() {
   const remoteDebugPort = Number.parseInt(env("STEALTH_BROWSER_PORT", "9223"), 10);
   const remoteDebugHost = env("STEALTH_BROWSER_HOST", "127.0.0.1");
 
-  // Use a temp dir for user data — avoids stale lock files from the persistent
-  // Docker volume that cause "profile in use by another process" crashes.
-  // Browser state (cookies, sessions) does not need to persist across restarts.
-  const userDataDir = fs.mkdtempSync("/tmp/stealth-browser-");
+  // Persist the Chrome profile so cookies and authenticated sessions survive
+  // wrapper restarts. The browser wrapper itself exits on CDP disconnect so
+  // supervisord can relaunch it cleanly against the same profile directory.
+  const userDataDir = env("STEALTH_BROWSER_USER_DATA_DIR", "/home/clawuser/.openclaw/stealth-browser-profile");
+  fs.mkdirSync(userDataDir, { recursive: true });
   console.log("[stealth-browser] User data dir: " + userDataDir);
 
   // Capsolver extension — must be loaded at launch time
@@ -281,7 +282,15 @@ async function main() {
   console.log(`[stealth-browser] ws endpoint: ${wsEndpoint}`);
   console.log(`[stealth-browser] capsolver: ${capsolverPath ? "active (auto-solve)" : "disabled"}`);
 
+  let shuttingDown = false;
+  browser.on("disconnected", () => {
+    if (shuttingDown) return;
+    console.error("[stealth-browser] browser disconnected; exiting for supervised restart");
+    process.exit(1);
+  });
+
   const shutdown = async (signal) => {
+    shuttingDown = true;
     console.log(`[stealth-browser] shutting down on ${signal}`);
     await browser.close().catch(() => {});
     process.exit(0);

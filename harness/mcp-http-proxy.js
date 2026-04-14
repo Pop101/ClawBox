@@ -25,7 +25,9 @@ function loadOAuthTokens() {
   try {
     oauthTokens = JSON.parse(fs.readFileSync(oauthFile, "utf8"));
     auth = `Bearer ${oauthTokens.access_token}`;
-  } catch { /* ignore */ }
+  } catch (e) {
+    process.stderr.write(`[mcp-proxy] Failed to load OAuth tokens from ${oauthFile}: ${e.message}\n`);
+  }
 }
 
 async function refreshIfNeeded() {

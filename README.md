@@ -4,21 +4,69 @@ A fully self-contained OpenClaw deployment that acts as a personal AI assistant 
 
 ## What's inside
 
-- **Multi-model failover** — models defined in `models.json` with automatic fallback chain. Swap providers by editing one file.
-- **Stealth browser + Capsolver** — headless Chromium with anti-fingerprinting patches and automatic captcha solving (reCAPTCHA, hCaptcha, Turnstile, DataDome, AWS WAF).
-- **Email + SMS + calls** — himalaya (IMAP/SMTP), Gmail (gog), Android SMS Gateway, Vapi voice calls. All pre-authenticated at boot.
-- **SMS/email relay** — background service polls for new messages every 2 minutes and forwards summaries to Telegram with conversation context.
-- **MCP servers** — connect any MCP tool (Notion, Hevy, Actual Budget, Claude Code, custom servers) via `models.json`.
-- **Smart scheduling** — Google Calendar, Google Tasks, Reclaim.ai.
-- **18+ skills** — web search, PDF, summarization, weather, GitHub, memory, cron, filesystem, and more.
-- **Process management** — supervisord manages gateway, stealth browser, and relay with auto-restart.
-- **Cost controls** — prompt caching, context pruning, quiet hours, heartbeat on cheapest model.
+### Core infrastructure
+- **Multi-model failover** — models defined in `models.json` with automatic fallback chain. Supports Anthropic, OpenRouter, Google Gemini, local llama.cpp, and any OpenAI-compatible API. Swap providers by editing one file.
+- **Process management** — supervisord manages 6 services (gateway, stealth browser, relay, tunnel, tunnel-watcher, MCP setup) with auto-restart and health checks.
+- **Cloudflare Tunnel** — auto-provisioned quick tunnel exposes the SMS webhook port without a public IP or port forwarding. Tunnel URL auto-detected and registered.
+- **Cost controls** — prompt caching, context pruning, quiet hours, heartbeat on cheapest model. `CONTEXT_TOKENS` env var to globally cap context window size.
+
+### Browser & web
+- **Stealth browser** — headless Chromium via Playwright + puppeteer-extra with anti-fingerprinting (stealth plugin), custom user-agent, and persistent profiles. Managed by a watchdog that auto-restarts on crash.
+- **Capsolver captcha solving** — Chrome extension auto-loaded at boot. Solves reCAPTCHA v2/v3, hCaptcha, Cloudflare Turnstile, DataDome, and AWS WAF automatically on every page load. No manual API calls needed.
+- **Credential lookup** — agent reads saved passwords from CSV exports in `/home/clawuser/credentials/` and uses them directly in the browser. Never echoes passwords in chat.
+
+### Communication
+- **Telegram** — primary chat interface. Allowlist-based access control via `TELEGRAM_ALLOW_FROM`.
+- **Email (himalaya)** — IMAP/SMTP email via himalaya CLI. Read, send, reply, forward, search.
+- **Gmail (gog)** — Google Workspace email via gog CLI. Separate from himalaya — agent checks both mailboxes.
+- **SMS (Android SMS Gateway)** — read and send texts from your Android phone. Full conversation history stored per-contact at `/home/clawuser/workspace/sms/`.
+- **Voice calls (Vapi)** — outbound phone calls with custom system prompts per call. Agent speaks as the owner.
+- **Signal** — E2E encrypted messaging via signal-cli.
+- **SMS/email relay** — background service polls for new messages every 2 minutes, batches them with conversation context, and forwards summaries to the active agent session.
+
+### Scheduling & productivity
+- **Google Calendar** — view, create, and delete events via gog CLI.
+- **Google Tasks** — to-do lists with deadlines via gog CLI.
+- **Reclaim.ai** — smart auto-scheduling of tasks and habits on Google Calendar via REST API.
+- **Cron skill** — schedule recurring agent-side tasks (daily email check, weekly reports, etc.).
+
+### Health & fitness
+- **Google Health API** — read AND write: meals, sleep, weight, steps, heart rate, hydration via custom `health-api.js` skill. Handles OAuth automatically through gog tokens.
+- **Hevy** — workout tracking and exercise logging via MCP server (user-configured).
+
+### MCP servers (pre-configured in models.json)
+- **Notion** — pages, databases, search via Notion's official remote MCP with personal OAuth (no workspace integration needed).
+- **Claude Code** — read/edit code, run shell commands, search codebases. Pre-installed CLI.
+- **Extensible** — add any MCP server (Actual Budget, Hevy, filesystem, custom) via `models.json`. Supports both remote HTTP (auto-proxied via stdio bridge with OAuth refresh) and local stdio servers.
+
+### Skills (18+ pre-installed via ClawHub)
+| Skill | What it does |
+|-------|-------------|
+| **tavily-search** | AI-optimized web search (bundled, needs API key) |
+| **ddg-web-search** | DuckDuckGo search, no API key needed (ClawHub) |
+| **jina-ai-reader** | Extract clean markdown from URLs (ClawHub) |
+| **summarize** | Summarize long documents, PDFs, YouTube videos (ClawHub) |
+| **pdf** | Extract, merge, split, fill PDF forms (ClawHub) |
+| **ai-humanizer** | Rewrite AI-generated text to sound natural (ClawHub) |
+| **openclaw-memory** | Persistent memory system across sessions (ClawHub) |
+| **cron** | Schedule recurring agent tasks (ClawHub) |
+| **clawdbot-filesystem** | Batch file operations (ClawHub) |
+| **http** | Make arbitrary HTTP requests (ClawHub) |
+| **vapi** | Manage Vapi voice AI agents and outbound calls (ClawHub) |
+| **weather** | Weather forecasts and conditions (ClawHub) |
+| **github** | Issues, PRs, CI status, repo queries (ClawHub) |
+| **skill-vetter** | Scan new skills for malicious code before installing (ClawHub) |
+| **find-skills** | Search ClawHub marketplace for new capabilities (ClawHub) |
+| **google-health** | Google Health API for meals, sleep, weight, steps (bundled) |
+| **himalaya** | Email management via himalaya CLI (bundled) |
+| **reclaim** | Reclaim.ai smart scheduling (bundled) |
+| **sms-gateway** | Android SMS Gateway integration (bundled) |
 
 ## Cost breakdown
 
 | Service | Cost | Notes |
 |---------|------|-------|
-| **Z.ai** (glm-5-turbo) | **Free** $10/mo credits | Primary model. Fast, 200K context. [Sign up](https://z.ai) |
+| **Z.ai** (glm-5-turbo) | **Free** $10/mo credits | Primary model. [Sign up](https://z.ai). **Use 32K-64K context** (see below). |
 | **Oracle Cloud** | **Free forever** | 4 ARM OCPUs, 24GB RAM, 200GB disk. [Always Free tier](https://www.oracle.com/cloud/free/) |
 | **Vapi** (voice calls) | ~$10 / 3 months | Pay-per-call. $10 lasts months of light use. [vapi.ai](https://vapi.ai) |
 | **Capsolver** (captchas) | ~$10 / forever | Pay-per-solve. $10 lasts effectively forever. [capsolver.com](https://capsolver.com) |
@@ -28,15 +76,29 @@ A fully self-contained OpenClaw deployment that acts as a personal AI assistant 
 
 **Total: ~$10/month** (just the model credits). Everything else is free or effectively free.
 
+### Z.ai context window guidance
+
+Z.ai (glm-5-turbo) advertises a 200K context window, but **quality degrades significantly past ~32K tokens.** The model loses coherence, hallucinates tool names, and forgets earlier instructions in long contexts.
+
+**Recommended:** Set `CONTEXT_TOKENS=32000` in `.env` (or 64000 max). This caps all models and forces aggressive compaction, which actually improves Z.ai output quality. The config generator respects this env var and caps all model windows accordingly.
+
+If you use a stronger fallback model (Claude, Gemini), you can set `contextWindow` per-model in `models.json` to give them a larger window while keeping Z.ai small.
+
+### Adding a fallback model
+
 Add a fallback model for when Z.ai credits run out. Recommended: [Qwen 35 Claude 4.6 Opus Reasoning](https://huggingface.co/mradermacher/Qwen3.5-27B-Claude-4.6-Opus-Reasoning-Distilled-i1-GGUF) — 27B parameters, vision support, runs on consumer hardware via llama.cpp.
 
 ## Quick start
 
 ```bash
-cp models.example.json models.json    # add your API keys and model config
-cp .env.example .env                  # fill in channel/tool credentials
+cp models.example.json models.json    # configure model providers and fallback order
+cp .env.example .env                  # add API keys, channel tokens, and tool credentials
 sh scripts/rebuild.sh                 # build and run
 ```
+
+API keys for model providers go in `.env` (e.g., `ANTHROPIC_API_KEY=sk-ant-...`) and are referenced via `{{VAR}}` templates in `models.json`. Channel tokens, tool credentials, and everything else also go in `.env`.
+
+**If using Z.ai:** Add `CONTEXT_TOKENS=32000` to `.env` for best results (see [Z.ai context window guidance](#zai-context-window-guidance)).
 
 ## Deploy to Oracle Cloud (Always Free)
 
