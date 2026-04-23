@@ -3,10 +3,9 @@ FROM node:22-bookworm
 # ARM-compatible build for Oracle Cloud Always Free Tier (A1.Flex / aarch64)
 
 RUN apt-get update && apt-get install -y --no-install-recommends \
-    xvfb xauth dbus-x11 fonts-noto-color-emoji fonts-liberation unzip \
+    fonts-noto-color-emoji fonts-liberation \
     openjdk-17-jre-headless wget supervisor curl \
-    && rm -rf /var/lib/apt/lists/* \
-    && mkdir -p /tmp/.X11-unix && chmod 1777 /tmp/.X11-unix
+    && rm -rf /var/lib/apt/lists/*
 
 # Install cloudflared (Cloudflare Tunnel — exposes webhook port without a public IP)
 RUN ARCH=$(dpkg --print-architecture) && \
@@ -21,8 +20,7 @@ RUN wget -q https://github.com/AsamK/signal-cli/releases/download/v0.14.1/signal
     rm signal-cli-0.14.1.tar.gz
 
 ENV NODE_PATH=/usr/lib/node_modules:/usr/local/lib/node_modules \
-    OPENCLAW_CONFIG_PATH=/home/clawuser/config/openclaw.json \
-    DISPLAY=:99
+    OPENCLAW_CONFIG_PATH=/home/clawuser/config/openclaw.json
 
 # Install gog CLI (Google Workspace) — arch-aware
 RUN ARCH=$(dpkg --print-architecture) && \
@@ -54,37 +52,11 @@ COPY models.json /home/clawuser/openclaw/models.json
 # This image is pushed to a PRIVATE OCIR registry only. Never push to a public registry.
 COPY credentials/ /home/clawuser/credentials/
 
-# Install Claude Code CLI (used as MCP server for coding tasks)
-RUN npm install -g @anthropic-ai/claude-code
-
-# Install OpenClaw + clawhub CLI + stealth browser dependencies + captcha solving
-# grammy is required by openclaw's Telegram channel handler but not bundled as a dependency
-RUN npm install -g openclaw@latest clawhub@latest grammy \
-    puppeteer-extra puppeteer-core \
-    puppeteer-extra-plugin-stealth puppeteer-extra-plugin-user-preferences \
-    puppeteer-extra-plugin-user-data-dir puppeteer-extra-plugin-capsolver
-
-# Extract the Capsolver Chrome extension from the npm package (it bundles it as a ZIP).
-# At runtime, stealth-browser.js patches config.js with the API key and loads it into Chrome.
-RUN mkdir -p /opt/capsolver-extension && \
-    CAPSOLVER_ZIP=$(find /usr/lib/node_modules/puppeteer-extra-plugin-capsolver /usr/local/lib/node_modules/puppeteer-extra-plugin-capsolver -name "*.zip" 2>/dev/null | head -1) && \
-    if [ -n "$CAPSOLVER_ZIP" ]; then \
-      unzip -o -q "$CAPSOLVER_ZIP" -d /opt/capsolver-extension && \
-      echo "Capsolver extension extracted from $CAPSOLVER_ZIP" && \
-      ls -la /opt/capsolver-extension/ && \
-      # If the ZIP extracted into a subdirectory, flatten it
-      if [ ! -f /opt/capsolver-extension/manifest.json ]; then \
-        SUBDIR=$(find /opt/capsolver-extension -maxdepth 2 -name "manifest.json" -printf '%h\n' 2>/dev/null | head -1) && \
-        if [ -n "$SUBDIR" ] && [ "$SUBDIR" != "/opt/capsolver-extension" ]; then \
-          echo "Flattening from $SUBDIR" && \
-          cp -a "$SUBDIR"/. /opt/capsolver-extension/ ; \
-        fi; \
-      fi && \
-      echo "manifest.json present: $(test -f /opt/capsolver-extension/manifest.json && echo YES || echo NO)"; \
-    else \
-      echo "WARNING: Capsolver extension ZIP not found in npm package"; \
-    fi && \
-    chmod -R a+rw /opt/capsolver-extension
+# Install OpenClaw + clawhub CLI. grammy is required by openclaw's Telegram
+# channel handler but not bundled as a dependency.
+# The @askjo/camofox-browser plugin (stealth Firefox browser) is installed at
+# runtime by entrypoint.sh so it lands under clawuser's $HOME/.openclaw.
+RUN npm install -g openclaw@latest clawhub@latest grammy
 
 # Install skills via clawhub into a staging directory (/opt/openclaw-skills/).
 # At runtime the entrypoint copies them into the persistent volume at
@@ -98,7 +70,6 @@ RUN mkdir -p /opt/openclaw-skills && \
     clawhub install jina-ai-reader --no-input --force && \
     clawhub install http --no-input --force && \
     clawhub install openclaw-memory --no-input --force && \
-    clawhub install ddg-web-search --no-input --force && \
     clawhub install summarize --no-input --force && \
     clawhub install pdf --no-input --force && \
     clawhub install weather --no-input --force && \
@@ -116,29 +87,8 @@ RUN mkdir -p /home/clawuser/.openclaw \
              /home/clawuser/workspace \
              /home/clawuser/.config/himalaya \
              /home/clawuser/config && \
-    cp /home/clawuser/credentials/himalaya.toml /home/clawuser/.config/himalaya/config.toml 2>/dev/null || true && \
+    cp /home/clawuser/credentials/himalaya.toml /home/clawuser/.config/himalaya/config.toml && \
     chown -R clawuser:clawuser /home/clawuser
-
-# Install Chromium via Playwright into /ms-playwright (where stealth-browser.js expects it)
-ENV PLAYWRIGHT_BROWSERS_PATH=/ms-playwright
-RUN npm install playwright@latest && \
-    npx playwright install chromium && \
-    npx playwright install-deps chromium
-
-# Symlink chrome-linux -> chrome-linux64 so stealth-browser.js finds it on ARM
-RUN for dir in /ms-playwright/chromium-*/; do \
-      if [ -d "${dir}chrome-linux" ] && [ ! -d "${dir}chrome-linux64" ]; then \
-        ln -sf "${dir}chrome-linux" "${dir}chrome-linux64"; \
-      fi; \
-    done
-
-# Also create standard symlinks
-RUN CHROME=$(find /ms-playwright -name chrome -type f 2>/dev/null | head -1) && \
-    if [ -n "$CHROME" ]; then \
-      ln -sf "$CHROME" /usr/bin/google-chrome && \
-      ln -sf "$CHROME" /usr/bin/chromium && \
-      ln -sf "$CHROME" /usr/bin/chromium-browser; \
-    fi || true
 
 USER clawuser
 

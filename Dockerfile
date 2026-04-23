@@ -1,13 +1,14 @@
-FROM mcr.microsoft.com/playwright:v1.58.2
+FROM node:22-bookworm
 
 # No build ARGs needed for API keys — config is generated at runtime
 # by entrypoint.sh using env vars from docker-compose.
+# Browser is provided by the @askjo/camofox-browser plugin (Camoufox/Firefox
+# with built-in anti-detection); no Chromium/xvfb/Capsolver needed.
 
 RUN apt-get update && apt-get install -y --no-install-recommends \
-    xvfb xauth dbus-x11 fonts-noto-color-emoji fonts-liberation unzip \
+    fonts-noto-color-emoji fonts-liberation \
     openjdk-17-jre-headless wget curl supervisor \
-    && rm -rf /var/lib/apt/lists/* \
-    && mkdir -p /tmp/.X11-unix && chmod 1777 /tmp/.X11-unix
+    && rm -rf /var/lib/apt/lists/*
 
 # Install cloudflared (Cloudflare Tunnel — exposes webhook port without a public IP)
 RUN curl -sL https://github.com/cloudflare/cloudflared/releases/latest/download/cloudflared-linux-amd64 \
@@ -21,8 +22,7 @@ RUN wget -q https://github.com/AsamK/signal-cli/releases/download/v0.14.1/signal
     rm signal-cli-0.14.1.tar.gz
 
 ENV NODE_PATH=/usr/lib/node_modules:/usr/local/lib/node_modules \
-    OPENCLAW_CONFIG_PATH=/home/clawuser/config/openclaw.json \
-    DISPLAY=:99
+    OPENCLAW_CONFIG_PATH=/home/clawuser/config/openclaw.json
 
 # GOG_KEYRING_PASSWORD should be set via docker-compose env_file or environment,
 # not baked into the image. Add it to your .env file instead.
@@ -52,27 +52,11 @@ COPY prompts/ /home/clawuser/openclaw/prompts/
 COPY skills/ /home/clawuser/openclaw/skills/
 COPY models.json /home/clawuser/openclaw/models.json
 
-# Install Claude Code CLI (used as MCP server for coding tasks)
-RUN npm install -g @anthropic-ai/claude-code
-
-# Install OpenClaw + clawhub CLI + stealth browser dependencies + captcha solving
-# grammy is required by openclaw's Telegram channel handler but not bundled as a dependency
-RUN npm install -g openclaw@latest clawhub@latest grammy \
-    puppeteer-extra puppeteer-core \
-    puppeteer-extra-plugin-stealth puppeteer-extra-plugin-user-preferences \
-    puppeteer-extra-plugin-user-data-dir puppeteer-extra-plugin-capsolver
-
-# Extract the Capsolver Chrome extension from the npm package (it bundles it as a ZIP).
-# At runtime, stealth-browser.js patches config.js with the API key and loads it into Chrome.
-RUN mkdir -p /opt/capsolver-extension && \
-    CAPSOLVER_ZIP=$(find /usr/lib/node_modules/puppeteer-extra-plugin-capsolver /usr/local/lib/node_modules/puppeteer-extra-plugin-capsolver -name "*.zip" 2>/dev/null | head -1) && \
-    if [ -n "$CAPSOLVER_ZIP" ]; then \
-      unzip -q "$CAPSOLVER_ZIP" -d /opt/capsolver-extension && \
-      echo "Capsolver extension extracted from $CAPSOLVER_ZIP"; \
-    else \
-      echo "WARNING: Capsolver extension ZIP not found in npm package"; \
-    fi && \
-    chmod -R a+rw /opt/capsolver-extension
+# Install OpenClaw + clawhub CLI. grammy is required by openclaw's Telegram
+# channel handler but not bundled as a dependency.
+# The @askjo/camofox-browser plugin (stealth Firefox browser) is installed at
+# runtime by entrypoint.sh so it lands under clawuser's $HOME/.openclaw.
+RUN npm install -g openclaw@latest clawhub@latest grammy
 
 # Install skills via clawhub into a staging directory (/opt/openclaw-skills/).
 # At runtime the entrypoint copies them into the persistent volume at
@@ -84,7 +68,6 @@ RUN mkdir -p /opt/capsolver-extension && \
 #   @openclaw/jina      -> jina-ai-reader (owner: jiangtianjiao)
 #   @openclaw/http      -> http (owner: ivangdavila)
 #   @openclaw/memory    -> openclaw-memory (owner: AtlasPA)
-#   @openclaw/search    -> ddg-web-search (owner: JakeLin, no API key needed)
 #   humanizer           -> ai-humanizer (owner: brandonwise)
 RUN mkdir -p /opt/openclaw-skills && \
     cd /opt/openclaw-skills && \
@@ -96,7 +79,6 @@ RUN mkdir -p /opt/openclaw-skills && \
     clawhub install jina-ai-reader --no-input --force && \
     clawhub install http --no-input --force && \
     clawhub install openclaw-memory --no-input --force && \
-    clawhub install ddg-web-search --no-input --force && \
     # ── Additional recommended skills ──
     clawhub install summarize --no-input --force && \
     clawhub install pdf --no-input --force && \
@@ -117,16 +99,7 @@ RUN mkdir -p /home/clawuser/.openclaw \
              /home/clawuser/config && \
     chown -R clawuser:clawuser /home/clawuser
 
-RUN CHROME=$(find /ms-playwright -name chrome -path "*/chrome-linux64/*" 2>/dev/null | head -1) && \
-    if [ -n "$CHROME" ]; then \
-      ln -sf "$CHROME" /usr/bin/google-chrome && \
-      ln -sf "$CHROME" /usr/bin/chromium && \
-      ln -sf "$CHROME" /usr/bin/chromium-browser; \
-    fi
-
 USER clawuser
-
-RUN npx playwright install chromium
 
 EXPOSE 18789
 

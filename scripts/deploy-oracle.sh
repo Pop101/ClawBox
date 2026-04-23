@@ -123,10 +123,6 @@ with open('.env') as f:
             pairs[key] = val
 # Add docker-compose environment vars that aren't in .env
 # These are critical for the container runtime
-pairs.setdefault('OPENCLAW_BROWSER_CDP_URL', 'http://127.0.0.1:9223')
-pairs.setdefault('STEALTH_BROWSER_PORT', '9223')
-pairs.setdefault('STEALTH_BROWSER_HOST', '127.0.0.1')
-pairs.setdefault('STEALTH_BROWSER_HEADLESS', 'true')
 pairs.setdefault('OPENCLAW_DISABLE_BONJOUR', '1')
 pairs.setdefault('OPENCLAW_SKIP_PAIRING', '1')
 pairs.setdefault('OPENCLAW_TRUST_LOCAL_DEVICES', '1')

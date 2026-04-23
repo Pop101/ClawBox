@@ -9,11 +9,6 @@ services:
     env_file:
       - .env
     environment:
-      # Stealth browser — the CDP URL is internal to the container
-      OPENCLAW_BROWSER_CDP_URL: http://127.0.0.1:9223
-      STEALTH_BROWSER_PORT: "9223"
-      STEALTH_BROWSER_HOST: "127.0.0.1"
-      STEALTH_BROWSER_HEADLESS: ${STEALTH_BROWSER_HEADLESS:-true}
       # Disable mDNS broadcasting on local network
       OPENCLAW_DISABLE_BONJOUR: "1"
       # Skip device pairing for internal tool calls (Docker has no interactive pairing)

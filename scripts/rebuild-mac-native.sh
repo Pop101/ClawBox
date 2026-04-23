@@ -12,7 +12,9 @@ set -euo pipefail
 #         bash rebuild-mac-native.sh status   # show running processes
 
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
-REPO_DIR="$SCRIPT_DIR"
+REPO_DIR="$(dirname "$SCRIPT_DIR")"
+# Sync .env to ~/.openclaw so LaunchAgent can access it (macOS privacy restriction)
+cp "$REPO_DIR/.env" "$HOME/.openclaw/.env" 2>/dev/null || true
 
 # ── Target directories (mirrors Docker layout) ───────────────────────────────
 OPENCLAW_HOME="$HOME/.openclaw"
@@ -23,6 +25,7 @@ CREDENTIALS_LINK="$HOME/credentials"
 HIMALAYA_CONFIG="$HOME/.config/himalaya/config.toml"
 SKILLS_DIR="$WORKSPACE/skills"
 PID_DIR="$HOME/.openclaw/pids"
+RENDERED_PROMPTS="$OPENCLAW_HOME/prompts-rendered"
 
 # ── Colors ────────────────────────────────────────────────────────────────────
 GREEN='\033[0;32m'; YELLOW='\033[1;33m'; RED='\033[0;31m'; NC='\033[0m'
@@ -72,7 +75,11 @@ esac
 echo "=== OpenClaw Native macOS Setup ==="
 echo ""
 
-command -v node  >/dev/null || fail "Node.js not found. Install with: brew install node"
+# Source NVM if available (common on macOS when node is managed via nvm)
+export NVM_DIR="${NVM_DIR:-$HOME/.nvm}"
+[ -s "$NVM_DIR/nvm.sh" ] && \. "$NVM_DIR/nvm.sh"
+
+command -v node  >/dev/null || fail "Node.js not found. Install with: brew install node (or nvm install 22)"
 command -v npm   >/dev/null || fail "npm not found."
 
 NODE_VER=$(node -v | sed 's/v//' | cut -d. -f1)
@@ -82,17 +89,50 @@ NODE_VER=$(node -v | sed 's/v//' | cut -d. -f1)
 echo "[1/7] Checking npm global packages..."
 
 install_if_missing() {
-  if ! npm list -g "$1" >/dev/null 2>&1; then
-    echo "  Installing $1..."
-    npm install -g "$1"
+  local pkg="$1"
+  local name="${pkg%%@*}"
+  if ! npm list -g "$name" >/dev/null 2>&1; then
+    echo "  Installing $pkg..."
+    npm install -g "$pkg"
   else
-    echo "  $1 ✓"
+    echo "  $name ✓"
   fi
 }
 
 install_if_missing openclaw@latest
 install_if_missing clawhub@latest
-install_if_missing @anthropic-ai/claude-code
+
+# Install the @askjo/camofox-browser plugin (stealth browser). Uses child_process
+# to spawn the Camoufox server, so the built-in safety scanner blocks it without
+# --dangerously-force-unsafe-install.
+CAMOFOX_PLUGIN_DIR="$HOME/.openclaw/extensions/camofox-browser"
+if [ ! -f "$CAMOFOX_PLUGIN_DIR/server.js" ]; then
+  echo "  Installing @askjo/camofox-browser plugin..."
+  openclaw plugins install @askjo/camofox-browser \
+    --dangerously-force-unsafe-install --force >/dev/null 2>&1 \
+    || warn "camofox-browser install failed — browser tools will be unavailable"
+else
+  echo "  camofox-browser plugin ✓"
+fi
+
+# Patch the camofox plugin to add fullPage screenshot support.
+# This is idempotent — safe to run on every setup.
+if [ -f "$CAMOFOX_PLUGIN_DIR/plugin.ts" ]; then
+  node "$REPO_DIR/harness/patch-camofox-screenshot.js" || true
+fi
+
+# Patch the camofox server to fix scrolling.
+# Playwright's mouse.wheel() does not work in Firefox/Camoufox.
+# We replace it with JavaScript-based window.scrollBy().
+if [ -f "$CAMOFOX_PLUGIN_DIR/server.js" ]; then
+  node "$REPO_DIR/harness/patch-camofox-scroll.js" || true
+fi
+
+# Patch the camofox plugin for native macOS GUI mode (visible browser window).
+# This is a no-op on non-macOS platforms or inside Docker/Fly.
+if [ -f "$CAMOFOX_PLUGIN_DIR/server.js" ]; then
+  node "$REPO_DIR/harness/patch-camofox-gui-mac.js" || true
+fi
 
 # ── 2. Install system tools ──────────────────────────────────────────────────
 echo ""
@@ -116,7 +156,7 @@ echo ""
 echo "[3/7] Setting up directories and symlinks..."
 
 mkdir -p "$OPENCLAW_HOME" "$WORKSPACE" "$SKILLS_DIR" "$CONFIG_DIR" "$PID_DIR" \
-         "$(dirname "$HIMALAYA_CONFIG")"
+         "$RENDERED_PROMPTS" "$(dirname "$HIMALAYA_CONFIG")"
 
 # Symlink harness/ so generate-config.js can find its siblings
 ln -sfn "$REPO_DIR/harness" "$HARNESS_LINK"
@@ -154,18 +194,23 @@ OWNER_EMAIL="${OWNER_EMAIL:-}"
 QUIET_HOURS_START="${QUIET_HOURS_START:-23}"
 QUIET_HOURS_END="${QUIET_HOURS_END:-7}"
 
-# Seed prompt templates (copy + template, not symlink, because they get personalized)
+# Render templated prompts into a shadow dir every run, then symlink into
+# the workspace. This way workspace files are real symlinks, and edits to
+# prompts/*.md in the repo propagate on the next install run.
 for mdfile in SOUL.md AGENTS.md USER.md HEARTBEAT.md; do
   src="$REPO_DIR/prompts/$mdfile"
+  rendered="$RENDERED_PROMPTS/$mdfile"
   dst="$WORKSPACE/$mdfile"
-  if [ -f "$src" ] && [ ! -f "$dst" ]; then
-    sed -e "s|{{OWNER_NAME}}|${OWNER_NAME}|g" \
-        -e "s|{{OWNER_EMAIL}}|${OWNER_EMAIL}|g" \
-        -e "s|{{QUIET_HOURS_START}}|${QUIET_HOURS_START}|g" \
-        -e "s|{{QUIET_HOURS_END}}|${QUIET_HOURS_END}|g" \
-        "$src" > "$dst"
-    echo "  Seeded $mdfile"
-  fi
+  [ -f "$src" ] || continue
+  sed -e "s|{{OWNER_NAME}}|${OWNER_NAME}|g" \
+      -e "s|{{OWNER_EMAIL}}|${OWNER_EMAIL}|g" \
+      -e "s|{{QUIET_HOURS_START}}|${QUIET_HOURS_START}|g" \
+      -e "s|{{QUIET_HOURS_END}}|${QUIET_HOURS_END}|g" \
+      "$src" > "$rendered"
+  # Replace any stale copy with a symlink to the rendered file
+  [ -L "$dst" ] || rm -f "$dst"
+  ln -sfn "$rendered" "$dst"
+  echo "  Linked $mdfile -> $rendered"
 done
 
 # Symlink bundled skills into workspace
@@ -204,13 +249,10 @@ fi
 echo ""
 echo "[5/7] Generating config..."
 
-# Set env vars that generate-config.js expects — no stealth browser, use native system browser
+# Browser is handled by the @askjo/camofox-browser plugin (autoStart: true at
+# 127.0.0.1:9377) — no local Chromium/CDP setup needed on macOS.
 export OPENCLAW_CONFIG_PATH="${OPENCLAW_CONFIG_PATH:-$HOME/.openclaw/openclaw.json}"
-export STEALTH_BROWSER_HEADLESS="${STEALTH_BROWSER_HEADLESS:-false}"
-# Unset CDP URL so openclaw uses its built-in managed browser (system Chrome)
-unset OPENCLAW_BROWSER_CDP_URL 2>/dev/null || true
-unset STEALTH_BROWSER_PORT 2>/dev/null || true
-unset STEALTH_BROWSER_HOST 2>/dev/null || true
+export OPENCLAW_WORKSPACE_DIR="${OPENCLAW_WORKSPACE_DIR:-$HOME/openclaw-workspace}"
 
 node "$REPO_DIR/harness/generate-config.js"
 info "Config written to $OPENCLAW_CONFIG_PATH"
@@ -316,18 +358,18 @@ if [ "${1:-}" = "start" ]; then
     start_bg tunnel-watcher bash "$REPO_DIR/harness/tunnel-watcher.sh"
   fi
 
+
   # Relay (email/SMS polling)
   start_bg relay node "$REPO_DIR/harness/relay.js"
 
-  # Gateway
-  start_bg gateway openclaw gateway --port 18789 --auth none
+  # Gateway (token auth — gives CLI / Control UI full operator scopes)
+  start_bg gateway openclaw gateway --port 18789
 
   echo ""
   info "All services started! Use '$0 status' to check or '$0 stop' to stop."
   echo ""
   echo "  Gateway:  http://127.0.0.1:18789"
   echo "  Webhook:  http://127.0.0.1:18790"
-  echo "  Browser:  managed by openclaw (system Chrome)"
   echo ""
   echo "  Logs: tail the individual processes or check 'openclaw logs'"
 fi
@@ -340,5 +382,5 @@ if [ "${1:-}" != "start" ]; then
   echo "  bash $0 status   # Check process status"
   echo ""
   echo "Or start manually:"
-  echo "  openclaw gateway --port 18789 --auth none"
+  echo "  openclaw gateway --port 18789"
 fi

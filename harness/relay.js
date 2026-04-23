@@ -1,12 +1,25 @@
 #!/usr/bin/env node
-// Message relay — collects new emails and SMS, sends summaries to OpenClaw.
-// Also maintains SMS conversation history in /home/clawuser/workspace/sms/
-// with one file per phone number.
+// Message relay — forwards new emails and SMS to OpenClaw.
 //
-// Email: polls himalaya (IMAP) and gog (Gmail) every 2 minutes
-// SMS: triggers inbox export → receives webhooks on port 18790 → batches
+// SMS: webhook on port 18790 receives incoming texts from Android SMS
+// Gateway → each message is appended to per-contact history and dispatched
+// to the agent as soon as a short debounce window expires (live).
 //
-// Env vars: SMS_GATEWAY_URL, SMS_GATEWAY_USERNAME, SMS_GATEWAY_PASSWORD
+// Email: himalaya (IMAP) and gog (Gmail) are polled every 2 minutes,
+// filtered to unread only. First poll primes the "seen" sets without
+// notifying the agent so old mail isn't re-delivered on every restart.
+//
+// Env vars:
+//   SMS_GATEWAY_URL / SMS_GATEWAY_USERNAME / SMS_GATEWAY_PASSWORD
+//   GOG_KEYRING_PASSWORD  — needed to unlock gog's token store
+//   RELAY_PORT (default 18790) / RELAY_POLL_INTERVAL (default 120000)
+//   SMS_DEBOUNCE_MS (default 5000)
+//
+// Email accounts are discovered dynamically:
+//   himalaya  — `himalaya account list -o json`
+//   gmail     — `gog auth list -j`, filtered to accounts with gmail service
+// Adding a new account via `himalaya` TOML or `gog auth add` is picked up on
+// the next poll without a relay restart.
 
 const http = require("node:http");
 const fs = require("node:fs");
@@ -18,17 +31,25 @@ const SMS_USER = process.env.SMS_GATEWAY_USERNAME;
 const SMS_PASS = process.env.SMS_GATEWAY_PASSWORD;
 const WEBHOOK_PORT = Number.parseInt(process.env.RELAY_PORT || "18790", 10);
 const POLL_INTERVAL = Number.parseInt(process.env.RELAY_POLL_INTERVAL || "120000", 10);
-const SMS_HISTORY_DIR = "/home/clawuser/workspace/sms";
+const SMS_DEBOUNCE_MS = Number.parseInt(process.env.SMS_DEBOUNCE_MS || "5000", 10);
+const SMS_HISTORY_DIR = process.env.OPENCLAW_WORKSPACE_DIR
+  ? path.join(process.env.OPENCLAW_WORKSPACE_DIR, "sms")
+  : "/Users/leonl/openclaw-workspace/sms";
 
 const seenEmails = new Set();
 const seenSms = new Set();
 const pendingSms = [];
+let emailPrimed = false;
+let smsDispatchTimer = null;
 
 // ── Helpers ──────────────────────────────────────────────────────────────────
 
 function run(cmd) {
   try { return execSync(cmd, { encoding: "utf8", timeout: 30000, stdio: ["pipe", "pipe", "pipe"] }).trim(); }
-  catch { return ""; }
+  catch (e) {
+    console.error("[relay] run failed:", cmd.slice(0, 80), "→", (e.stderr?.toString() || e.message || "").slice(0, 200));
+    return "";
+  }
 }
 
 function smsApi(method, apiPath, body) {
@@ -62,8 +83,15 @@ function sendToAgent(text) {
   }
 }
 
+function formatAddr(addr) {
+  if (!addr) return "unknown";
+  if (typeof addr === "string") return addr;
+  if (Array.isArray(addr)) return addr.map(formatAddr).join(", ");
+  return addr.name ? `${addr.name} <${addr.addr}>` : (addr.addr || "unknown");
+}
+
 // ── SMS history ──────────────────────────────────────────────────────────────
-// One text file per phone number at /home/clawuser/workspace/sms/<number>.txt
+// One text file per phone number at /Users/leonl/openclaw-workspace/sms/<number>.txt
 // Format: [YYYY-MM-DD HH:MM] <direction> message text
 
 function sanitizeNumber(num) {
@@ -77,12 +105,11 @@ function appendSmsHistory(number, direction, text, timestamp) {
   const prefix = direction === "in" ? "THEM" : "ME";
   const line = `[${time}] ${prefix}: ${text}\n`;
 
-  // Avoid duplicate lines (check last 5 lines)
-  try {
-    const existing = fs.readFileSync(file, "utf8");
-    const lastLines = existing.trim().split("\n").slice(-5);
+  // Avoid duplicate lines (check last 5) — fresh file is always a first write.
+  if (fs.existsSync(file)) {
+    const lastLines = fs.readFileSync(file, "utf8").trim().split("\n").slice(-5);
     if (lastLines.some(l => l.includes(text.slice(0, 40)))) return;
-  } catch { /* file doesn't exist yet */ }
+  }
 
   fs.appendFileSync(file, line, "utf8");
 }
@@ -91,20 +118,55 @@ function appendSmsHistory(number, direction, text, timestamp) {
 function pollSentMessages() {
   const raw = smsApi("GET", "/3rdparty/v1/message?limit=20");
   if (!raw) return;
-  try {
-    const messages = JSON.parse(raw);
-    if (!Array.isArray(messages)) return;
-    for (const msg of messages) {
-      const key = `sent:${msg.id}`;
-      if (seenSms.has(key)) continue;
-      seenSms.add(key);
-      const text = msg.message || "";
-      const time = msg.createdAt || new Date().toISOString();
-      for (const r of (msg.recipients || [])) {
-        appendSmsHistory(r.phoneNumber, "out", text, time);
-      }
+  let messages;
+  try { messages = JSON.parse(raw); }
+  catch (e) { console.error("[relay] pollSentMessages parse error:", e.message, "raw:", raw.slice(0, 120)); return; }
+  if (!Array.isArray(messages)) return;
+  for (const msg of messages) {
+    const key = `sent:${msg.id}`;
+    if (seenSms.has(key)) continue;
+    seenSms.add(key);
+    const text = msg.message || "";
+    const time = msg.createdAt || new Date().toISOString();
+    for (const r of (msg.recipients || [])) {
+      appendSmsHistory(r.phoneNumber, "out", text, time);
     }
-  } catch { /* ignore */ }
+  }
+}
+
+// ── SMS live dispatch ────────────────────────────────────────────────────────
+// Webhook drops into pendingSms and schedules a dispatch. Quick-fire texts
+// coalesce into a single agent turn within SMS_DEBOUNCE_MS.
+
+function scheduleSmsDispatch() {
+  if (smsDispatchTimer) clearTimeout(smsDispatchTimer);
+  smsDispatchTimer = setTimeout(() => {
+    smsDispatchTimer = null;
+    const section = buildSmsSection();
+    if (!section) return;
+    sendToAgent("New SMS:\n\n" + section);
+    console.log("[relay] Live SMS dispatched to agent");
+  }, SMS_DEBOUNCE_MS);
+}
+
+function buildSmsSection() {
+  if (pendingSms.length === 0) return "";
+  const bySender = {};
+  for (const msg of pendingSms) {
+    if (!bySender[msg.sender]) bySender[msg.sender] = [];
+    bySender[msg.sender].push(msg);
+  }
+  const lines = [];
+  for (const [sender, msgs] of Object.entries(bySender)) {
+    lines.push(`From ${sender}:`);
+    for (const m of msgs) {
+      const time = m.time.slice(11, 16);
+      lines.push(`  [${time}] ${m.text.slice(0, 300)}`);
+    }
+    lines.push(`  (full history: ${path.join(SMS_HISTORY_DIR, sanitizeNumber(sender) + ".txt")})`);
+  }
+  pendingSms.length = 0;
+  return lines.join("\n");
 }
 
 // ── SMS webhook receiver ─────────────────────────────────────────────────────
@@ -124,6 +186,7 @@ const server = http.createServer(async (req, res) => {
     else if (Array.isArray(data)) messages.push(...data);
     else if (data.message && (data.phoneNumber || data.sender)) messages.push(data);
 
+    let newCount = 0;
     for (const msg of messages) {
       const sender = msg.sender || msg.phoneNumber || msg.from || "unknown";
       const text = msg.message || msg.body || msg.text || "";
@@ -135,9 +198,11 @@ const server = http.createServer(async (req, res) => {
         pendingSms.push({ sender, text, time });
         appendSmsHistory(sender, "in", text, time);
         console.log(`[relay] SMS webhook received: ${sender} (${text.slice(0, 30)}...)`);
+        newCount++;
       }
     }
 
+    if (newCount > 0) scheduleSmsDispatch();
     res.writeHead(200);
     res.end("ok");
   } catch (err) {
@@ -154,8 +219,8 @@ let lastRegisteredUrl = "";
 function getTunnelUrl() {
   const manual = process.env.TUNNEL_URL;
   if (manual) return manual;
-  try { return fs.readFileSync("/tmp/tunnel-url", "utf8").trim(); }
-  catch { return ""; }
+  if (!fs.existsSync("/tmp/tunnel-url")) return "";
+  return fs.readFileSync("/tmp/tunnel-url", "utf8").trim();
 }
 
 function cleanupStaleWebhooks(currentUrl) {
@@ -163,7 +228,8 @@ function cleanupStaleWebhooks(currentUrl) {
   const listRaw = smsApi("GET", "/3rdparty/v1/webhooks");
   if (!listRaw) return;
   let hooks;
-  try { hooks = JSON.parse(listRaw); } catch { return; }
+  try { hooks = JSON.parse(listRaw); }
+  catch (e) { console.error("[relay] cleanupStaleWebhooks parse error:", e.message, "raw:", listRaw.slice(0, 120)); return; }
   if (!Array.isArray(hooks)) return;
   const stale = hooks.filter(h => !currentUrl || h.url !== currentUrl);
   if (stale.length === 0) return;
@@ -195,7 +261,8 @@ function triggerSmsExport() {
   const devicesRaw = smsApi("GET", "/3rdparty/v1/device");
   if (!devicesRaw) return;
   let devices;
-  try { devices = JSON.parse(devicesRaw); } catch { return; }
+  try { devices = JSON.parse(devicesRaw); }
+  catch (e) { console.error("[relay] triggerSmsExport parse error:", e.message, "raw:", devicesRaw.slice(0, 120)); return; }
   const deviceId = Array.isArray(devices) ? devices[0]?.id : devices?.id;
   if (!deviceId) { console.log("[relay] No SMS device found"); return; }
   const since = new Date(Date.now() - 600000).toISOString();
@@ -204,65 +271,85 @@ function triggerSmsExport() {
   console.log(`[relay] Export triggered for device ${deviceId} (${since.slice(11,19)} - ${until.slice(11,19)}) → ${exportResult || "(202 accepted)"}`);
 }
 
-// ── SMS summary builder ──────────────────────────────────────────────────────
+// ── Email polling ────────────────────────────────────────────────────────────
+// Both pollers filter to UNREAD only, so we don't re-deliver already-read
+// mail after a relay restart.
 
-function buildSmsSection() {
-  if (pendingSms.length === 0) return "";
-  const bySender = {};
-  for (const msg of pendingSms) {
-    if (!bySender[msg.sender]) bySender[msg.sender] = [];
-    bySender[msg.sender].push(msg);
-  }
-  const lines = [];
-  for (const [sender, msgs] of Object.entries(bySender)) {
-    lines.push(`SMS from ${sender}:`);
-    for (const m of msgs) {
-      const time = m.time.slice(11, 16);
-      lines.push(`  [${time}] ${m.text.slice(0, 300)}`);
-    }
-    lines.push(`  (full history: /home/clawuser/workspace/sms/${sanitizeNumber(sender)}.txt)`);
-  }
-  pendingSms.length = 0;
-  return lines.join("\n");
+// Envelope/thread list is fast; do NOT read bodies — each `message read` is
+// 2-15s of IMAP and a batch of 20 would block the relay for minutes. The
+// agent can fetch specific bodies on demand via the himalaya / gog skills.
+
+function listHimalayaAccounts() {
+  const out = run("himalaya account list -o json");
+  if (!out) return [];
+  try { return JSON.parse(out).map(a => a.name).filter(Boolean); }
+  catch (e) { console.error("[relay] listHimalayaAccounts parse error:", e.message); return []; }
 }
 
-// ── Email polling ────────────────────────────────────────────────────────────
-
-function pollHimalaya() {
-  const output = run('himalaya envelope list --page-size 20 --output json 2>/dev/null');
-  if (!output) return [];
-  const results = [];
+function listGogGmailAccounts() {
+  const out = run("gog auth list -j");
+  if (!out) return [];
   try {
-    for (const e of JSON.parse(output)) {
-      const key = `h:${e.id}`;
-      if (seenEmails.has(key)) continue;
-      seenEmails.add(key);
-      let preview = "";
-      const full = run(`himalaya message read ${e.id} 2>/dev/null`);
-      if (full) preview = full.split("\n").slice(0, 3).join(" ").slice(0, 200);
-      results.push({ source: "himalaya", from: e.from || "unknown", subject: e.subject || "(no subject)", preview });
-    }
-  } catch { /* ignore */ }
+    const data = JSON.parse(out);
+    return (data.accounts || [])
+      .filter(a => a.email && Array.isArray(a.services) && a.services.includes("gmail"))
+      .map(a => a.email);
+  } catch (e) { console.error("[relay] listGogGmailAccounts parse error:", e.message); return []; }
+}
+
+function pollHimalayaAccount(account) {
+  const flag = account ? `-a ${account}` : "";
+  const out = run(`himalaya envelope list ${flag} --page-size 20 --output json "not flag seen"`);
+  if (!out) return [];
+  let envelopes;
+  try { envelopes = JSON.parse(out); }
+  catch (e) { console.error(`[relay] pollHimalaya(${account}) parse error:`, e.message, "raw:", out.slice(0, 120)); return []; }
+  const results = [];
+  for (const e of envelopes) {
+    const key = `h:${account}:${e.id}`;
+    if (seenEmails.has(key)) continue;
+    seenEmails.add(key);
+    results.push({
+      source: `himalaya/${account}`,
+      id: e.id,
+      from: formatAddr(e.from),
+      subject: e.subject || "(no subject)",
+      date: e.date || "",
+    });
+  }
   return results;
 }
 
-function pollGog() {
-  const output = run("gog gmail list --limit 20 --format json 2>/dev/null");
-  if (!output) return [];
+function pollGogAccount(email) {
+  const out = run(`gog gmail search "is:unread" --max 20 -j --account ${email}`);
+  if (!out) return [];
+  let payload;
+  try { payload = JSON.parse(out); }
+  catch (e) { console.error(`[relay] pollGog(${email}) parse error:`, e.message, "raw:", out.slice(0, 120)); return []; }
+  const threads = Array.isArray(payload) ? payload : (payload.threads || payload.messages || []);
   const results = [];
-  try {
-    for (const msg of JSON.parse(output)) {
-      const key = `g:${msg.id || msg.messageId}`;
-      if (seenEmails.has(key)) continue;
-      seenEmails.add(key);
-      results.push({
-        source: "gmail",
-        from: msg.from || msg.sender || "unknown",
-        subject: msg.subject || "(no subject)",
-        preview: (msg.snippet || "").slice(0, 200),
-      });
-    }
-  } catch { /* ignore */ }
+  for (const msg of threads) {
+    const id = msg.id || msg.threadId || msg.messageId;
+    if (!id) continue;
+    const key = `g:${email}:${id}`;
+    if (seenEmails.has(key)) continue;
+    seenEmails.add(key);
+    results.push({
+      source: `gmail/${email}`,
+      id,
+      from: formatAddr(msg.from || msg.sender),
+      subject: msg.subject || "(no subject)",
+      snippet: (msg.snippet || "").slice(0, 200),
+      date: msg.internalDate || msg.date || "",
+    });
+  }
+  return results;
+}
+
+function pollAllEmail() {
+  const results = [];
+  for (const acct of listHimalayaAccounts()) results.push(...pollHimalayaAccount(acct));
+  for (const email of listGogGmailAccounts()) results.push(...pollGogAccount(email));
   return results;
 }
 
@@ -270,13 +357,13 @@ function buildEmailSection(emails) {
   if (emails.length === 0) return "";
   const lines = [];
   for (const e of emails) {
-    lines.push(`Email (${e.source}) from ${e.from}: ${e.subject}`);
-    if (e.preview) lines.push(`  ${e.preview}...`);
+    lines.push(`[${e.source} #${e.id}] ${e.from} — ${e.subject}`);
+    if (e.snippet) lines.push(`  ${e.snippet}...`);
   }
   return lines.join("\n");
 }
 
-// ── Main poll cycle ──────────────────────────────────────────────────────────
+// ── Main poll cycle (email only; SMS is delivered live via webhook) ──────────
 
 async function poll() {
   console.log("[relay] Polling...");
@@ -285,23 +372,23 @@ async function poll() {
   triggerSmsExport();
   pollSentMessages(); // track outbound SMS for history
 
-  await new Promise(r => setTimeout(r, 5000));
+  const emails = pollAllEmail();
+  const emailSection = buildEmailSection(emails);
 
-  const smsSection = buildSmsSection();
-  const allEmails = [...pollHimalaya(), ...pollGog()];
-  const emailSection = buildEmailSection(allEmails);
-
-  if (!smsSection && !emailSection) {
-    console.log("[relay] No new messages");
+  // First poll after startup only primes dedup sets, doesn't notify.
+  // Prevents flooding the agent with already-read mail after a relay restart.
+  if (!emailPrimed) {
+    emailPrimed = true;
+    console.log(`[relay] Primed ${emails.length} unread email(s); not dispatching on startup`);
     return;
   }
 
-  let summary = "New messages:\n\n";
-  if (smsSection) summary += smsSection + "\n\n";
-  if (emailSection) summary += emailSection;
-
-  sendToAgent(summary);
-  console.log("[relay] Summary sent to agent");
+  if (!emailSection) {
+    console.log("[relay] No new email");
+  } else {
+    sendToAgent("New email:\n\n" + emailSection);
+    console.log(`[relay] ${emails.length} email(s) dispatched to agent`);
+  }
 
   for (const s of [seenEmails, seenSms]) {
     if (s.size > 5000) {
@@ -317,8 +404,12 @@ async function poll() {
 fs.mkdirSync(SMS_HISTORY_DIR, { recursive: true });
 
 server.listen(WEBHOOK_PORT, "0.0.0.0", () => {
-  console.log(`[relay] Webhook listener on port ${WEBHOOK_PORT}, polling every ${POLL_INTERVAL / 1000}s`);
-  console.log(`[relay] SMS: ${SMS_URL ? "enabled" : "disabled (no SMS_GATEWAY_URL)"}`);
+  const himAccts = listHimalayaAccounts();
+  const gogAccts = listGogGmailAccounts();
+  console.log(`[relay] Webhook listener on port ${WEBHOOK_PORT}; SMS live (${SMS_DEBOUNCE_MS}ms debounce), email every ${POLL_INTERVAL / 1000}s`);
+  console.log(`[relay] SMS Gateway: ${SMS_URL ? "enabled" : "disabled (no SMS_GATEWAY_URL)"}`);
+  console.log(`[relay] Himalaya accounts: ${himAccts.length ? himAccts.join(", ") : "(none)"}`);
+  console.log(`[relay] Gmail accounts:    ${gogAccts.length ? gogAccts.join(", ") : "(none)"}`);
   console.log(`[relay] SMS history: ${SMS_HISTORY_DIR}`);
   console.log(`[relay] Tunnel: ${getTunnelUrl() || "waiting..."}`);
 });

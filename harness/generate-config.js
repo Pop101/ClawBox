@@ -1,10 +1,13 @@
 const fs = require("node:fs");
 const path = require("node:path");
+const crypto = require("node:crypto");
 
 const CONFIG_PATH = process.env.OPENCLAW_CONFIG_PATH?.trim()
   ? path.resolve(process.env.OPENCLAW_CONFIG_PATH.trim())
   : "/home/clawuser/.openclaw/openclaw.json";
-const WORKSPACE = "/home/clawuser/workspace";
+const WORKSPACE = process.env.OPENCLAW_WORKSPACE_DIR?.trim()
+  ? path.resolve(process.env.OPENCLAW_WORKSPACE_DIR.trim())
+  : "/home/clawuser/workspace";
 const SCRIPT_DIR = __dirname;
 
 // ── Helpers ──────────────────────────────────────────────────────────────────
@@ -72,7 +75,7 @@ for (const [key, cfg] of Object.entries(modelsJson.providers)) {
 
   const modelDef = {
     id: model, name: model,
-    reasoning: /([-:_.])(r1|reason|reasoning|think)([-:_.]|$)/i.test(model),
+    reasoning: cfg.reasoning !== undefined ? cfg.reasoning : /([-:_.])(r1|reason|reasoning|think)([-:_.]|$)/i.test(model),
     input: cfg.input || ["text"],
     cost: cfg.cost || { input: 0, output: 0, cacheRead: 0, cacheWrite: 0 },
     contextWindow: effectiveCtx,
@@ -88,12 +91,25 @@ for (const [key, cfg] of Object.entries(modelsJson.providers)) {
       ...(baseUrl ? { baseUrl: baseUrl.replace(/\/+$/, "") } : {}),
       api,
       ...(apiKey ? { apiKey } : {}),
+      ...(cfg.headers && typeof cfg.headers === "object" ? { headers: cfg.headers } : {}),
       models: [],
     };
   }
-  providers[providerName].models.push(modelDef);
+
+  // Two provider entries with the same provider + model resolve to one
+  // modelRef. Push the model definition only on first sight, and fail loudly
+  // if a later entry claims a different alias — that would silently clobber.
+  const existing = providers[providerName].models.find(m => m.id === modelDef.id);
+  if (!existing) providers[providerName].models.push(modelDef);
+  else if (modelAliases[modelRef]?.alias && modelAliases[modelRef].alias !== (cfg.alias || key)) {
+    console.warn(`  WARNING: ${key} collides with existing alias '${modelAliases[modelRef].alias}' for ${modelRef}; keeping the first alias. Collapse the duplicate provider entry in models.json.`);
+    continue;
+  }
 
   modelAliases[modelRef] = { alias: cfg.alias || key };
+  if (cfg.params && typeof cfg.params === "object") {
+    modelAliases[modelRef].params = cfg.params;
+  }
 
   if (cfg.extras?.upgradeModel) {
     const upModel = cfg.extras.upgradeModel;
@@ -135,20 +151,12 @@ const allWindows = Object.values(providers).flatMap(p => p.models.map(m => m.con
 const effectiveContextTokens = globalContextCap || Math.min(...allWindows);
 
 // ── Browser ──────────────────────────────────────────────────────────────────
-// Capsolver extension is loaded by stealth-browser.js at Chrome launch time.
+// Browser tools are provided by the @askjo/camofox-browser plugin
+// (configured below under plugins.entries). The legacy Chromium/CDP browser
+// subsystem is disabled — camofox registers its own tool surface.
 
-const cdpUrl = env("OPENCLAW_BROWSER_CDP_URL");
 const mcpConfig = buildMcpServers();
-const browser = {
-  enabled: Boolean(cdpUrl),
-  defaultProfile: "stealth",
-  headless: true, noSandbox: true,
-  ssrfPolicy: { dangerouslyAllowPrivateNetwork: true },
-  profiles: cdpUrl ? {
-    stealth: { cdpUrl, attachOnly: true, color: "#FF4500" },
-  } : {},
-  remoteCdpTimeoutMs: 15000, remoteCdpHandshakeTimeoutMs: 15000,
-};
+const browser = { enabled: false };
 
 // ── Skills ───────────────────────────────────────────────────────────────────
 
@@ -186,7 +194,7 @@ function skillEnv(vars) {
 }
 const simpleSkills = [
   "humanizer", "filesystem", "cron", "jina-reader", "HTTP",
-  "openclaw-memory", "ddg-search", "himalaya", "summarize",
+  "openclaw-memory", "himalaya", "summarize",
   "pdf", "weather", "github", "skill-vetter", "find-skills",
 ];
 const skillEntries = Object.fromEntries(simpleSkills.map(s => [s, { enabled: true }]));
@@ -217,10 +225,14 @@ function dmPolicy(allowFromEnv) {
 
 function buildChannels() {
   const ch = {};
-  if (env("TELEGRAM_BOT_TOKEN")) ch.telegram = { enabled: true, ...dmPolicy("TELEGRAM_ALLOW_FROM") };
-  if (env("SIGNAL_NUMBER")) ch.signal = { enabled: true, account: env("SIGNAL_NUMBER"), cliPath: "signal-cli", ...dmPolicy("SIGNAL_ALLOW_FROM") };
+  // threadBindings.spawnSubagentSessions enables subagent spawning from this channel.
+  // We put it inside threadBindings because some channel schemas (e.g. Telegram)
+  // reject top-level spawnSubagentSessions as an additionalProperty.
+  const subagentSupport = { threadBindings: { spawnSubagentSessions: true } };
+  if (env("TELEGRAM_BOT_TOKEN")) ch.telegram = { enabled: true, ...subagentSupport, ...dmPolicy("TELEGRAM_ALLOW_FROM") };
+  if (env("SIGNAL_NUMBER")) ch.signal = { enabled: true, ...subagentSupport, account: env("SIGNAL_NUMBER"), cliPath: "signal-cli", ...dmPolicy("SIGNAL_ALLOW_FROM") };
   if (env("TWILIO_ACCOUNT_SID") && env("TWILIO_AUTH_TOKEN") && env("TWILIO_PHONE_NUMBER"))
-    ch.twilio = { enabled: true, accountSid: env("TWILIO_ACCOUNT_SID"), authToken: env("TWILIO_AUTH_TOKEN"), phoneNumber: env("TWILIO_PHONE_NUMBER"), ...dmPolicy("TWILIO_ALLOW_FROM") };
+    ch.twilio = { enabled: true, ...subagentSupport, accountSid: env("TWILIO_ACCOUNT_SID"), authToken: env("TWILIO_AUTH_TOKEN"), phoneNumber: env("TWILIO_PHONE_NUMBER"), ...dmPolicy("TWILIO_ALLOW_FROM") };
   return Object.keys(ch).length > 0 ? { channels: ch } : {};
 }
 
@@ -264,12 +276,27 @@ function buildMcpServers() {
 
 // ── Assemble config ──────────────────────────────────────────────────────────
 
+// Generate a persistent gateway token if not provided via env.
+// Token auth gives connecting clients (CLI, Control UI) full operator scopes,
+// avoiding "missing scope: operator.read" errors that occur with auth mode "none".
+const gatewayToken = env("OPENCLAW_GATEWAY_TOKEN") || generatePersistentToken();
+
+function generatePersistentToken() {
+  // Re-use an existing auto-generated token so we don't invalidate CLI sessions on every regen
+  try {
+    const existing = JSON.parse(fs.readFileSync(CONFIG_PATH, "utf8"));
+    if (existing.gateway?.auth?.token && existing.gateway.auth.mode === "token") {
+      return existing.gateway.auth.token;
+    }
+  } catch {}
+  return crypto.randomBytes(32).toString("base64url");
+}
+
 const config = {
   gateway: {
     mode: "local",
-    auth: env("OPENCLAW_GATEWAY_TOKEN")
-      ? { mode: "token", token: env("OPENCLAW_GATEWAY_TOKEN") }
-      : { mode: "none" },
+    auth: { mode: "token", token: gatewayToken },
+    remote: { token: gatewayToken },
     controlUi: {
       dangerouslyDisableDeviceAuth: true,
       allowInsecureAuth: true,
@@ -299,7 +326,7 @@ const config = {
       model: { primary, fallbacks },
       ...(visionModelRef ? { imageModel: { primary: visionModelRef } } : {}),
       heartbeat: { every: "30m", model: heartbeatModel },
-      subagents: { model: heartbeatModel, maxConcurrent: 2 },
+      subagents: { model: heartbeatModel, maxConcurrent: 8, allowAgents: ["*"], maxSpawnDepth: 2, maxChildrenPerAgent: 10 },
       contextPruning: { mode: "cache-ttl", ttl: "1h" },
       compaction: {
         mode: "safeguard",
@@ -309,12 +336,35 @@ const config = {
           prompt: "Save decisions, facts, and open questions to memory/daily.md. Reply NO_REPLY if nothing to store.",
         },
       },
-      maxConcurrent: 4,
+      maxConcurrent: 8,
     },
   },
   ...buildChannels(),
+  plugins: {
+    entries: {
+      "camofox-browser": {
+        enabled: true,
+        config: {
+          url: "http://127.0.0.1:9377",
+          autoStart: true,
+          maxSessions: 5,
+          maxTabsPerSession: 3
+        }
+      }
+    }
+  },
   meta: { lastTouchedVersion: "2026.3.30", lastTouchedAt: new Date().toISOString() },
 };
+
+// Preserve plugins.allow from existing config so manual trust settings survive regen
+let existingConfig = {};
+try {
+  existingConfig = JSON.parse(fs.readFileSync(CONFIG_PATH, "utf8"));
+} catch {}
+if (existingConfig.plugins?.allow) {
+  config.plugins = config.plugins || {};
+  config.plugins.allow = existingConfig.plugins.allow;
+}
 
 fs.writeFileSync(CONFIG_PATH, JSON.stringify(config, null, 2) + "\n", "utf8");
 fs.writeFileSync(path.join(WORKSPACE, "SYSTEM.md"), systemPrompt + "\n", "utf8");
@@ -328,6 +378,6 @@ console.log(`  Heartbeat: ${heartbeatModel}`);
 console.log(`  Context:   ${effectiveContextTokens.toLocaleString()} tokens${globalContextCap ? " (global cap)" : " (per-model min)"}`);
 console.log(`  Auth:      ${config.gateway.auth.mode}${config.gateway.auth.mode === "token" ? " (operator scopes enabled)" : " (WARNING: no operator scopes)"}`);
 console.log(`  Cache:     ${Object.entries(providers).filter(([, p]) => p.params?.cacheControlTtl).map(([k]) => k).join(", ") || "none"} (ttl=1h)`);
-console.log(`  Browser:   ${cdpUrl ? "stealth only" : "disabled (OPENCLAW_BROWSER_CDP_URL missing)"}`);
+console.log(`  Browser:   camofox-browser plugin (auto-start at ${config.plugins?.entries?.["camofox-browser"]?.config?.url || "http://127.0.0.1:9377"})`);
 console.log(`  MCP:       ${Object.keys(mcpConfig.mcp?.servers || {}).join(", ") || "none"}`);
 console.log(`  Providers: ${Object.keys(providers).join(", ")}`);

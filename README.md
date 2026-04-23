@@ -5,14 +5,13 @@ A fully self-contained OpenClaw deployment that acts as a personal AI assistant 
 ## What's inside
 
 ### Core infrastructure
-- **Multi-model failover** — models defined in `models.json` with automatic fallback chain. Supports Anthropic, OpenRouter, Google Gemini, local llama.cpp, and any OpenAI-compatible API. Swap providers by editing one file.
-- **Process management** — supervisord manages 6 services (gateway, stealth browser, relay, tunnel, tunnel-watcher, MCP setup) with auto-restart and health checks.
+- **Kimi-only** — single model provider (`kimi-for-coding` via `api.kimi.com/coding`). No fallback chain; Kimi or bust.
+- **Process management** — supervisord manages the gateway, relay, tunnel, and tunnel-watcher with auto-restart and health checks. The browser runs inside the gateway via the camofox-browser plugin.
 - **Cloudflare Tunnel** — auto-provisioned quick tunnel exposes the SMS webhook port without a public IP or port forwarding. Tunnel URL auto-detected and registered.
 - **Cost controls** — prompt caching, context pruning, quiet hours, heartbeat on cheapest model. `CONTEXT_TOKENS` env var to globally cap context window size.
 
 ### Browser & web
-- **Stealth browser** — headless Chromium via Playwright + puppeteer-extra with anti-fingerprinting (stealth plugin), custom user-agent, and persistent profiles. Managed by a watchdog that auto-restarts on crash.
-- **Capsolver captcha solving** — Chrome extension auto-loaded at boot. Solves reCAPTCHA v2/v3, hCaptcha, Cloudflare Turnstile, DataDome, and AWS WAF automatically on every page load. No manual API calls needed.
+- **Stealth browser** — [@askjo/camofox-browser](https://www.npmjs.com/package/@askjo/camofox-browser) plugin. Headless Camoufox (Firefox with C++ anti-detection) served over a local REST API by the gateway. Auto-starts at `127.0.0.1:9377`, session-isolated, with element refs + snapshot-based interaction. Bypasses Cloudflare, Turnstile, DataDome, AWS WAF, and reCAPTCHA at the fingerprint level — no captcha-solving API involved.
 - **Credential lookup** — agent reads saved passwords from CSV exports in `/home/clawuser/credentials/` and uses them directly in the browser. Never echoes passwords in chat.
 
 ### Communication
@@ -36,14 +35,12 @@ A fully self-contained OpenClaw deployment that acts as a personal AI assistant 
 
 ### MCP servers (pre-configured in models.json)
 - **Notion** — pages, databases, search via Notion's official remote MCP with personal OAuth (no workspace integration needed).
-- **Claude Code** — read/edit code, run shell commands, search codebases. Pre-installed CLI.
 - **Extensible** — add any MCP server (Actual Budget, Hevy, filesystem, custom) via `models.json`. Supports both remote HTTP (auto-proxied via stdio bridge with OAuth refresh) and local stdio servers.
 
 ### Skills (18+ pre-installed via ClawHub)
 | Skill | What it does |
 |-------|-------------|
 | **tavily-search** | AI-optimized web search (bundled, needs API key) |
-| **ddg-web-search** | DuckDuckGo search, no API key needed (ClawHub) |
 | **jina-ai-reader** | Extract clean markdown from URLs (ClawHub) |
 | **summarize** | Summarize long documents, PDFs, YouTube videos (ClawHub) |
 | **pdf** | Extract, merge, split, fill PDF forms (ClawHub) |
@@ -66,27 +63,14 @@ A fully self-contained OpenClaw deployment that acts as a personal AI assistant 
 
 | Service | Cost | Notes |
 |---------|------|-------|
-| **Z.ai** (glm-5-turbo) | **Free** $10/mo credits | Primary model. [Sign up](https://z.ai). **Use 32K-64K context** (see below). |
+| **Kimi** (kimi-for-coding) | **Free** | Primary (and only) model. [Sign up](https://kimi.com). |
 | **Oracle Cloud** | **Free forever** | 4 ARM OCPUs, 24GB RAM, 200GB disk. [Always Free tier](https://www.oracle.com/cloud/free/) |
 | **Vapi** (voice calls) | ~$10 / 3 months | Pay-per-call. $10 lasts months of light use. [vapi.ai](https://vapi.ai) |
-| **Capsolver** (captchas) | ~$10 / forever | Pay-per-solve. $10 lasts effectively forever. [capsolver.com](https://capsolver.com) |
 | **Tavily** (web search) | Free tier | 1,000 searches/month free. [tavily.com](https://tavily.com) |
 | **SMS Gateway** | Free tier | Cloud API included. [sms-gate.app](https://sms-gate.app) |
 | Telegram, GitHub, Google Workspace, Signal | Free | — |
 
-**Total: ~$10/month** (just the model credits). Everything else is free or effectively free.
-
-### Z.ai context window guidance
-
-Z.ai (glm-5-turbo) advertises a 200K context window, but **quality degrades significantly past ~32K tokens.** The model loses coherence, hallucinates tool names, and forgets earlier instructions in long contexts.
-
-**Recommended:** Set `CONTEXT_TOKENS=32000` in `.env` (or 64000 max). This caps all models and forces aggressive compaction, which actually improves Z.ai output quality. The config generator respects this env var and caps all model windows accordingly.
-
-If you use a stronger fallback model (Claude, Gemini), you can set `contextWindow` per-model in `models.json` to give them a larger window while keeping Z.ai small.
-
-### Adding a fallback model
-
-Add a fallback model for when Z.ai credits run out. Recommended: [Qwen 35 Claude 4.6 Opus Reasoning](https://huggingface.co/mradermacher/Qwen3.5-27B-Claude-4.6-Opus-Reasoning-Distilled-i1-GGUF) — 27B parameters, vision support, runs on consumer hardware via llama.cpp.
+**Total: ~$0/month** (Kimi is free). Everything else is free or effectively free.
 
 ## Quick start
 
@@ -96,9 +80,101 @@ cp .env.example .env                  # add API keys, channel tokens, and tool c
 sh scripts/rebuild.sh                 # build and run
 ```
 
-API keys for model providers go in `.env` (e.g., `ANTHROPIC_API_KEY=sk-ant-...`) and are referenced via `{{VAR}}` templates in `models.json`. Channel tokens, tool credentials, and everything else also go in `.env`.
+API keys for model providers go in `.env` (e.g., `KIMI_API_KEY=your-kimi-key`) and are referenced via `{{VAR}}` templates in `models.json`. Channel tokens, tool credentials, and everything else also go in `.env`.
 
-**If using Z.ai:** Add `CONTEXT_TOKENS=32000` to `.env` for best results (see [Z.ai context window guidance](#zai-context-window-guidance)).
+
+
+## Native macOS install (no Docker)
+
+Run OpenClaw directly on macOS without containers. Useful for managing the host machine directly (file system, app automation, local browsers).
+
+### Prerequisites
+
+Install these once via Homebrew:
+
+```bash
+brew install node@22 cloudflared himalaya gh
+brew install steipete/tap/gogcli
+```
+
+Node v22+ is required. If `node -v` shows < 22, link it:
+
+```bash
+brew link node@22 --force --overwrite
+```
+
+### First-time setup
+
+```bash
+cp models.example.json models.json    # configure model providers and fallback order
+cp .env.example .env                  # add API keys, channel tokens, and tool credentials
+bash scripts/rebuild-mac-native.sh    # install deps, create symlinks, generate config
+```
+
+The script does the following automatically:
+
+1. **Installs global npm packages** — `openclaw`, `clawhub`, and the `@askjo/camofox-browser` stealth browser plugin
+2. **Checks system tools** — verifies `cloudflared`, `gog`, `himalaya`, and `gh` are on PATH
+3. **Creates directories and symlinks** — mirrors the Docker layout under `~/.openclaw/` and `~/openclaw-workspace/`
+4. **Seeds workspace prompts and skills** — renders templated prompts (`SOUL.md`, `AGENTS.md`, etc.) and links bundled skills
+5. **Generates `openclaw.json`** — produces the runtime config from `models.json` + `.env`
+6. **Sets up GOG auth** — loads `credentials.json` and imports any `gog-token*.json` tokens
+7. **Configures exec approvals** — writes `~/.openclaw/exec-approvals.json` so tools run without interactive prompts
+
+### Start services
+
+```bash
+bash scripts/rebuild-mac-native.sh start
+```
+
+This starts four background processes managed via pidfiles in `~/.openclaw/pids/`:
+
+| Service | Port | What it does |
+|---------|------|-------------|
+| Gateway | `18789` | OpenClaw gateway (token auth — full operator scopes) |
+| Relay | — | Email/SMS polling and webhook listener (`node harness/relay.js`) |
+| Tunnel | — | Cloudflare quick tunnel exposing the webhook port |
+| Tunnel watcher | — | Detects tunnel URL and registers it with OpenClaw |
+
+Stop or check status:
+
+```bash
+bash scripts/rebuild-mac-native.sh stop
+bash scripts/rebuild-mac-native.sh status
+```
+
+### Camoufox browser plugin
+
+The `@askjo/camofox-browser` plugin provides stealth browser automation via Camoufox (a hardened Firefox fork). It uses `child_process` to spawn the browser server, which triggers OpenClaw's built-in safety scanner during normal plugin installation.
+
+If automatic installation is blocked, install manually:
+
+```bash
+mkdir -p ~/.openclaw/plugins/camofox-browser
+cd ~/.openclaw/plugins/camofox-browser
+npm pack @askjo/camofox-browser --pack-destination /tmp
+tar -xzf /tmp/askjo-camofox-browser-*.tgz --strip-components=1
+npm install
+npm rebuild better-sqlite3
+```
+
+The `npm rebuild better-sqlite3` step is required on macOS because the prebuilt SQLite bindings are not shipped for Apple Silicon/Node v22. Without it, the Camoufox browser server will start but fail to launch the actual browser process.
+
+After installation, tell OpenClaw to trust the plugin:
+
+```bash
+openclaw config set plugins.allow '["camofox-browser"]'
+```
+
+This silences the "untracked local code" warning that appears because the plugin was installed outside of OpenClaw's normal install flow.
+
+The plugin server starts on port `9377` and exposes REST endpoints for tab creation, navigation, clicking, typing, screenshots, and downloads. OpenClaw connects to it automatically when the plugin is present.
+
+### Environment notes
+
+- `OPENCLAW_WORKSPACE_DIR` defaults to `~/openclaw-workspace`. Override it in your shell profile or `.env` if you want a different path.
+- The harness generator and relay both respect `OPENCLAW_WORKSPACE_DIR` instead of hardcoded Docker paths.
+- Credentials live in `./credentials/` (linked to `~/credentials`). `himalaya.toml` is symlinked to `~/.config/himalaya/config.toml`.
 
 ## Deploy to Oracle Cloud (Always Free)
 
@@ -231,19 +307,12 @@ RECLAIM_API_KEY=your-reclaim-api-key
 ```
 Get from [app.reclaim.ai/settings/developer](https://app.reclaim.ai/settings/developer). Auto-schedules tasks and habits on Google Calendar.
 
-#### Capsolver
-
-```
-CAPSOLVER_API_KEY=your-capsolver-api-key
-```
-Get from [capsolver.com](https://www.capsolver.com/). Loaded into stealth Chrome at boot — auto-solves captchas.
-
 #### Web search
 
 ```
 TAVILY_API_KEY=your-tavily-api-key
 ```
-Get from [tavily.com](https://tavily.com/). DuckDuckGo works as fallback with no key.
+Get from [tavily.com](https://tavily.com/).
 
 ---
 
@@ -277,7 +346,6 @@ Use `{{VAR_NAME}}` in env/auth values to reference environment variables or API 
 | Server | What it does | Setup |
 |--------|-------------|-------|
 | [Notion MCP](https://developers.notion.com/docs/mcp) | Pages, databases, search | `node scripts/notion-auth.js` for OAuth, no integration needed |
-| [Claude Code](https://code.claude.com) | Read/edit code, run shell commands, search codebases | Pre-installed. Needs `ANTHROPIC_API_KEY` in a provider. |
 | [Actual Budget](https://actualbudget.org) | Budgets, accounts, transactions | Self-hosted MCP, connect via URL |
 | [Hevy](https://hevy.com) | Workout tracking, exercise logging | Self-hosted MCP, connect via URL |
 | [Open Wearables](https://github.com/the-momentum/open-wearables) | Sleep, activity, heart rate from Samsung/Health Connect | Docker Compose sidecar with built-in MCP |

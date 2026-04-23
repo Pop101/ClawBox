@@ -147,8 +147,12 @@ async function handleMessage(json) {
   try {
     await sendRequest(json);
   } catch (err) {
+    // When JSON-RPC delivery fails, we still need to reply to the originating
+    // request with the same id. A malformed incoming message is the only case
+    // where parsing the id can fail, and the spec allows id=null there.
     let id = null;
-    try { id = JSON.parse(json).id; } catch { /* ignore */ }
+    try { id = JSON.parse(json).id; }
+    catch (parseErr) { console.error("[mcp-proxy] could not parse request id from malformed JSON:", parseErr.message); }
     process.stdout.write(JSON.stringify({
       jsonrpc: "2.0", id,
       error: { code: -32000, message: "MCP proxy: " + err.message },

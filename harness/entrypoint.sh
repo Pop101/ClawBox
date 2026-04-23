@@ -44,13 +44,13 @@ for mdfile in SOUL.md AGENTS.md USER.md HEARTBEAT.md; do
   fi
 done
 
-# ── Xvfb (only if non-headless) ─────────────────────────────────────────────
-export DISPLAY=:99
-if [ "${STEALTH_BROWSER_HEADLESS:-true}" = "false" ]; then
-  rm -f /tmp/.X99-lock || true
-  rm -rf /tmp/.X11-unix/X99 || true
-  Xvfb :99 -screen 0 1920x1080x24 -nolisten tcp -ac 2>/dev/null &
-  sleep 1
+# ── Camofox browser plugin ──────────────────────────────────────────────────
+# The plugin spawns Camoufox via child_process, which trips OpenClaw's safety
+# scanner — the --dangerously-force-unsafe-install flag acknowledges that.
+if ! openclaw plugins list 2>/dev/null | grep -q "camofox-browser"; then
+  echo "[entrypoint] Installing @askjo/camofox-browser plugin..."
+  openclaw plugins install @askjo/camofox-browser \
+    --dangerously-force-unsafe-install --force
 fi
 
 # ── Gateway auth token ───────────────────────────────────────────────────────
