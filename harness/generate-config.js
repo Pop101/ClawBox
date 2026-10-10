@@ -199,7 +199,7 @@ const simpleSkills = [
 ];
 const skillEntries = Object.fromEntries(simpleSkills.map(s => [s, { enabled: true }]));
 Object.assign(skillEntries, {
-  "vapi": { enabled: true, ...(env("VAPI_API_KEY") ? { apiKey: env("VAPI_API_KEY") } : {}), ...skillEnv([["VAPI_API_KEY"]]) },
+  "vapi": { enabled: !!env("VAPI_API_KEY"), ...(env("VAPI_API_KEY") ? { apiKey: env("VAPI_API_KEY") } : {}), ...skillEnv([["VAPI_API_KEY"], ["VAPI_ASSISTANT_ID"], ["VAPI_PHONE_NUMBER_ID"]]) },
   "tavily-search": { enabled: true, ...skillEnv([["TAVILY_API_KEY"]]) },
   "reclaim": { enabled: true, ...skillEnv([["RECLAIM_API_KEY"]]) },
   "sms-gateway": { enabled: true, ...skillEnv([["SMS_GATEWAY_URL"], ["SMS_GATEWAY_USERNAME"], ["SMS_GATEWAY_PASSWORD"]]) },
