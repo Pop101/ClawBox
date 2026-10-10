@@ -261,6 +261,14 @@ VAPI_ASSISTANT_ID=your-assistant-id
 VAPI_PHONE_NUMBER_ID=your-phone-number-id
 ```
 
+To check the assistant, retired models, and phone-number configuration without placing a call or incurring call charges, run this from the repository root with Node 22+:
+
+```bash
+node --env-file=.env harness/check-vapi.mjs
+```
+
+This audit only makes authenticated GET requests to Vapi. Keep the private API key in the gitignored `.env` file. Free Vapi phone numbers are inbound-only; outbound calling needs an outbound-capable number from a telephony provider.
+
 #### Signal
 
 ```
